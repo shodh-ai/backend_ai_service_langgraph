@@ -1,23 +1,35 @@
-
 import os
 from dotenv import load_dotenv
-load_dotenv() # Load .env variables at the very beginning
 
+# Load environment variables only once at the beginning
+load_dotenv()
+if os.getenv("MEM0_API_KEY"):
+    print(f"--- DEBUG: MEM0_API_KEY is set. ---")
+else:
+    print("--- WARNING: MEM0_API_KEY is NOT set. Mem0 functionalities will fail. ---")
+
+import logging
+# Configure basic logging early, this might be reconfigured by uvicorn but good for initial script execution
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', force=True)
+logger = logging.getLogger("uvicorn.error")
 
 # app.py
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-# from fastapi.concurrency import run_in_threadpool # Not explicitly used in new version, can be removed if not needed elsewhere
 import logging
 import uuid
 import json
 import asyncio
-import os
-from dotenv import load_dotenv
-load_dotenv()
-print(f"--- DEBUG: MEM0_API_KEY is set to: {os.getenv('MEM0_API_KEY')} ---")
 from typing import Dict, Any, Optional, List
+
+# Configure logging once
+# Using DEBUG level to capture detailed information
+logging.basicConfig(
+    level=logging.DEBUG, 
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    force=True  # Ensure this configuration takes precedence
+)
 
 from graph_builder import build_graph
 from state import AgentGraphState
@@ -27,23 +39,6 @@ from models import (
     InteractionRequestContext,
     ReactUIAction,
 )
-
-# Configure basic logging for the application
-# This will set the root logger level and format, affecting all module loggers unless they are specifically configured otherwise.
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Configure logging
-# Using uvicorn's logger for consistency if running with uvicorn
-# BasicConfig can be used as a fallback or for non-uvicorn environments
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger("uvicorn.error") # Standard for Uvicorn, captures its logs and app logs if configured
 
 app = FastAPI(
     title="TOEFL Tutor AI Service",
@@ -62,7 +57,6 @@ app.add_middleware(
 
 # Initialize the graph when the application starts
 toefl_tutor_graph = build_graph()
-
 
 async def stream_graph_responses_sse(request_data: InteractionRequest):
     """
@@ -86,6 +80,36 @@ async def stream_graph_responses_sse(request_data: InteractionRequest):
     if context.task_stage == "speaking_task_submitted":
         full_submitted_transcript = transcript
 
+    # Extract next_task_details from request payload if present
+    next_task_details = None
+    
+    # Method 1: Direct attribute access
+    if hasattr(request_data, 'next_task_details'):
+        logger.info(f"next_task_details attribute exists: {hasattr(request_data, 'next_task_details')}")
+        if request_data.next_task_details is not None:
+            next_task_details = request_data.next_task_details
+            logger.info(f"Method 1: Found next_task_details in request: {next_task_details}")
+    
+    # Method 2: Dictionary extraction
+    request_dict = request_data.model_dump()
+    logger.info(f"Request dict keys: {list(request_dict.keys())}")
+    if 'next_task_details' in request_dict:
+        dict_task_details = request_dict.get('next_task_details')
+        logger.info(f"Method 2: Extracted next_task_details from dict: {dict_task_details}")
+        if next_task_details is None and dict_task_details is not None:
+            next_task_details = dict_task_details
+    
+    # Override from top-level fields for testing
+    if next_task_details is None or not isinstance(next_task_details, dict) or 'page_target' not in next_task_details:
+        # Create a valid next_task_details for testing
+        next_task_details = {
+            "title": "Reading Comprehension: Academic Passages",
+            "type": "practice",
+            "page_target": "reading_exercise",
+            "prompt_id": "read_comprehension_001"
+        }
+        logger.info(f"Created test next_task_details: {next_task_details}")
+    
     # Prepare initial state similar to the non-streaming endpoint
     initial_graph_state: AgentGraphState = {
         "user_id": user_id,
@@ -98,7 +122,7 @@ async def stream_graph_responses_sse(request_data: InteractionRequest):
         "question_stage": context.question_stage,
         # Initialize other fields as in the non-streaming endpoint
         "student_memory_context": None,
-        "next_task_details": None,
+        "next_task_details": next_task_details,
         "diagnosis_result": None,
         "output_content": None, # Will be populated by output_formatter
         "feedback_content": None,
@@ -136,6 +160,12 @@ async def stream_graph_responses_sse(request_data: InteractionRequest):
     logger.info(f"Streaming endpoint: Initializing graph stream for session {session_id}, user {user_id}")
 
     try:
+        # Track streamed messages to avoid duplicates
+        streamed_messages = set()
+        
+        # Send a start event to help client initialize
+        yield f"event: stream_start\ndata: {{\"session_id\": \"{session_id}\", \"message\": \"Stream started\"}}\n\n"
+        
         # Use astream_events_v2 to get detailed events
         async for event in toefl_tutor_graph.astream_events(initial_graph_state, config=config, stream_mode="values", output_keys=["output_content"]):
             event_name = event.get("event")
@@ -143,7 +173,8 @@ async def stream_graph_responses_sse(request_data: InteractionRequest):
             data = event.get("data", {})
             tags = event.get("tags", [])
 
-            # logger.debug(f"SSE Stream Event: {event_name}, Node: {node_name}, Data: {data}, Tags: {tags}")
+            logger.info(f"SSE Stream: Event - {event_name} from {node_name}")
+            logger.debug(f"SSE Stream: Full data for event: {data if isinstance(data, (str, int, bool, type(None))) else list(data.keys()) if isinstance(data, dict) else 'Non-dict/primitive'}")
 
             if event_name == "on_chain_stream" and data:
                 chunk_content = data.get("chunk") # LangGraph's default key for streaming output from .stream()
@@ -155,21 +186,167 @@ async def stream_graph_responses_sse(request_data: InteractionRequest):
                         yield f"event: text_chunk\ndata: {json.dumps({'text': streaming_text})}\n\n"
                         await asyncio.sleep(0.01) # Small delay to allow client processing
 
-            elif event_name == "on_chain_end" and node_name == "format_final_output_for_client_node": # Or your actual output formatter node name
-                # This event signifies the end of a node's execution. 
-                # We are interested in the final output of the formatter node.
-                final_output_package = data.get("final_output") # LangGraph's key for final output of a node
-                if isinstance(final_output_package, dict) and final_output_package.get("output_content"):
-                    # The 'output_content' key from the state is what our formatter node populates.
-                    formatted_data = final_output_package["output_content"]
-                    logger.info(f"SSE Stream: Yielding final_response from node '{node_name}': {list(formatted_data.keys())}")
-                    yield f"event: final_response\ndata: {json.dumps(formatted_data)}\n\n"
-                    # Once the final response is sent, we can break if no further events are expected for this request.
-                    # However, other nodes might still run (e.g., memory saving), so let the stream complete naturally.
-                    # break 
+
+
+            elif event_name == "on_chain_end":
+                # This event signifies the end of a node's execution
+                node_output = data.get("output")
+                
+                # Handle output from format_final_output_for_client_node
+                if node_name == "format_final_output_for_client_node" and isinstance(node_output, dict) and "final_text_for_tts" in node_output:
+                    # Check if raw_pedagogy_output exists and is properly structured
+                    if "raw_pedagogy_output" in node_output and isinstance(node_output["raw_pedagogy_output"], dict):
+                        logger.info(f"SSE Stream: Found raw_pedagogy_output in formatter output with keys: {list(node_output['raw_pedagogy_output'].keys())}")
+                    
+                    # Create fingerprint for this formatter output
+                    final_text = node_output.get("final_text_for_tts", "")
+                    msg_fingerprint = f"formatter:{final_text[:50]}"
+                    
+                    if msg_fingerprint not in streamed_messages:
+                        streamed_messages.add(msg_fingerprint)
+                        logger.info(f"SSE Stream: Yielding final_response from formatter node (fingerprint: {msg_fingerprint})")
+                        yield f"event: final_response\ndata: {json.dumps(node_output)}\n\n"
+                    else:
+                        logger.info(f"SSE Stream: Skipping duplicate formatter output (fingerprint: {msg_fingerprint})")
+                
+
+                
+                # Handle output from initial_report_generation_node
+                elif node_name == "initial_report_generation" and isinstance(node_output, dict) and "initial_report_content" in node_output:
+                    logger.info(f"SSE Stream: Processing initial_report_generation output with keys: {list(node_output.keys())}")
+                    report_content = node_output["initial_report_content"]
+                    
+                    if isinstance(report_content, dict) and "report_text" in report_content:
+                        report_text = report_content["report_text"]
+                        logger.info(f"SSE Stream: Found initial report text: {report_text[:100]}...")
+                        
+                        # Create a structure matching what the client expects
+                        final_output = {
+                            "final_text_for_tts": report_text,
+                            "raw_initial_report": report_content  # Use consistent naming with other raw outputs
+                        }
+                        
+                        # Create fingerprint for initial report
+                        msg_fingerprint = f"report:{report_text[:50]}"
+                        if msg_fingerprint not in streamed_messages:
+                            streamed_messages.add(msg_fingerprint)
+                            logger.info(f"SSE Stream: Yielding initial report as final_response (fingerprint: {msg_fingerprint})")
+                            yield f"event: final_response\ndata: {json.dumps(final_output)}\n\n"
+                        else:
+                            logger.info(f"SSE Stream: Skipping duplicate initial report (fingerprint: {msg_fingerprint})")
+                    else:
+                        logger.warning(f"SSE Stream: initial_report_content missing 'report_text' or not a dict: {report_content}")
+                
+                # Handle output from inactivity_prompt_node
+                elif node_name == "inactivity_prompt" and isinstance(node_output, dict):
+                    # The inactivity prompt node stores its text in output_content.text_for_tts
+                    output_content = node_output.get("output_content", {})
+                    if isinstance(output_content, dict) and "text_for_tts" in output_content:
+                        prompt_text = output_content["text_for_tts"]
+                        final_output = {
+                            "final_text_for_tts": prompt_text,
+                            "raw_inactivity_output": output_content  # Consistent with other raw outputs
+                        }
+                        # Create fingerprint for inactivity prompt
+                        msg_fingerprint = f"inactivity:{prompt_text[:50]}"
+                        if msg_fingerprint not in streamed_messages:
+                            streamed_messages.add(msg_fingerprint)
+                            logger.info(f"SSE Stream: Yielding inactivity prompt as final_response (fingerprint: {msg_fingerprint})")
+                            yield f"event: final_response\ndata: {json.dumps(final_output)}\n\n"
+                        else:
+                            logger.info(f"SSE Stream: Skipping duplicate inactivity prompt (fingerprint: {msg_fingerprint})")
+                
+                # Handle output from either pedagogy_generation node or PEDAGOGY_MODULE subgraph
+                elif (node_name == "pedagogy_generation" or node_name == "PEDAGOGY_MODULE") and isinstance(node_output, dict):
+                    # Check for task_suggestion_llm_output in node output
+                    pedagogy_output = None
+                    content_text = None
+                    
+                    # First check if pedagogy output is directly in the node output
+                    if "task_suggestion_llm_output" in node_output:
+                        pedagogy_output = node_output["task_suggestion_llm_output"]
+                    # If not found directly, check the state
+                    elif "task_suggestion_llm_output" in initial_graph_state:
+                        pedagogy_output = initial_graph_state["task_suggestion_llm_output"]
+                    
+                    # Extract the TTS text if available
+                    if isinstance(pedagogy_output, dict) and "task_suggestion_tts" in pedagogy_output:
+                        content_text = pedagogy_output["task_suggestion_tts"]
+                        logger.info(f"SSE Stream: Found pedagogy TTS text: {content_text[:100]}...")
+                        
+                        # Create fingerprint for pedagogy output
+                        msg_fingerprint = f"pedagogy:{content_text[:50]}"
+                        
+                        # Only send if not already streamed
+                        if msg_fingerprint not in streamed_messages:
+                            streamed_messages.add(msg_fingerprint)
+                            final_output = {
+                                "final_text_for_tts": content_text,
+                                "raw_pedagogy_output": pedagogy_output  # Consistent with other raw outputs
+                            }
+                            logger.info(f"SSE Stream: Yielding pedagogy output (fingerprint: {msg_fingerprint})")
+                            yield f"event: final_response\ndata: {json.dumps(final_output)}\n\n"
+                        else:
+                            logger.info(f"SSE Stream: Skipping duplicate pedagogy output (fingerprint: {msg_fingerprint})")
+                    # Try to find assistant_content for standard nodes as a fallback
+                    elif "assistant_content" in node_output and node_output["assistant_content"]:
+                        content_text = node_output["assistant_content"]
+                        msg_fingerprint = f"pedagogy_assistant:{content_text[:50]}"
+                        
+                        if msg_fingerprint not in streamed_messages:
+                            streamed_messages.add(msg_fingerprint)
+                            final_output = {
+                                "final_text_for_tts": content_text
+                            }
+                            logger.info(f"SSE Stream: Yielding assistant_content from {node_name} as final_response")
+                            yield f"event: final_response\ndata: {json.dumps(final_output)}\n\n"
+                        else:
+                            logger.info(f"SSE Stream: Skipping duplicate assistant_content (fingerprint: {msg_fingerprint})")
+                    # Add debugging to see what's actually in the output
+                    else:
+                        logger.info(f"SSE Stream: Received output from {node_name} but couldn't find expected fields. Output keys: {list(node_output.keys()) if isinstance(node_output, dict) else 'Not a dict'}")
+
+
+        # Check for any final outputs that weren't streamed during the graph execution
+        logger.info(f"SSE Stream: Stream completed, checking for any missed outputs in final state")
+        logger.info(f"SSE Stream: Final state keys: {list(initial_graph_state.keys()) if isinstance(initial_graph_state, dict) else 'Not a dict'}")
+        
+        # Check if task_suggestion_llm_output exists in the state
+        if "task_suggestion_llm_output" in initial_graph_state and initial_graph_state["task_suggestion_llm_output"]:
+            pedagogy_output = initial_graph_state["task_suggestion_llm_output"]
+            if isinstance(pedagogy_output, dict) and "task_suggestion_tts" in pedagogy_output:
+                content_text = pedagogy_output["task_suggestion_tts"]
+                msg_fingerprint = f"pedagogy:{content_text[:50]}"
+                
+                # Only send if not already streamed
+                if msg_fingerprint not in streamed_messages:
+                    streamed_messages.add(msg_fingerprint)
+                    final_output = {
+                        "final_text_for_tts": content_text,
+                        "raw_pedagogy_output": pedagogy_output
+                    }
+                    logger.info(f"SSE Stream: Yielding pedagogy output from final state (fingerprint: {msg_fingerprint})")
+                    yield f"event: final_response\ndata: {json.dumps(final_output)}\n\n"
+        
+        # Check for initial report
+        if "initial_report_content" in initial_graph_state:
+            report_content = initial_graph_state["initial_report_content"]
+            if isinstance(report_content, dict) and "report_text" in report_content:
+                report_text = report_content["report_text"]
+                msg_fingerprint = f"report:{report_text[:50]}"
+                
+                # Only send if not already streamed
+                if msg_fingerprint not in streamed_messages:
+                    streamed_messages.add(msg_fingerprint)
+                    final_output = {
+                        "final_text_for_tts": report_text,
+                        "raw_initial_report": report_content
+                    }
+                    logger.info(f"SSE Stream: Yielding initial report from final state (fingerprint: {msg_fingerprint})")
+                    yield f"event: final_response\ndata: {json.dumps(final_output)}\n\n"
 
         logger.info(f"SSE Stream: Graph stream completed for session {session_id}")
-        yield f"event: stream_end\ndata: {{'message': 'Stream ended'}}\n\n"
+        yield f"event: stream_end\ndata: {{\"message\": \"Stream completed\", \"session_id\": \"{session_id}\"}}\n\n"
 
     except Exception as e:
         logger.error(f"Exception in stream_graph_responses_sse for session {session_id}: {e}", exc_info=True)
@@ -186,6 +363,8 @@ async def process_interaction_streaming_route(request_data: InteractionRequest):
 
 @app.post("/process_interaction", response_model=InteractionResponse)
 async def process_interaction_route(request_data: InteractionRequest):
+    # Debugging: Log the entire request payload to see what we're getting
+    logger.info(f"Received request payload: {json.dumps(request_data.model_dump(), default=str)[:500]}...")
     default_user_id = "default_user_for_testing"
     default_session_id = str(uuid.uuid4())
 
@@ -202,6 +381,36 @@ async def process_interaction_route(request_data: InteractionRequest):
     if context.task_stage == "speaking_task_submitted":
         full_submitted_transcript = transcript
 
+    # Extract next_task_details from request payload if present
+    next_task_details = None
+    
+    # Method 1: Direct attribute access
+    if hasattr(request_data, 'next_task_details'):
+        logger.info(f"next_task_details attribute exists: {hasattr(request_data, 'next_task_details')}")
+        if request_data.next_task_details is not None:
+            next_task_details = request_data.next_task_details
+            logger.info(f"Method 1: Found next_task_details in request: {next_task_details}")
+    
+    # Method 2: Dictionary extraction
+    request_dict = request_data.model_dump()
+    logger.info(f"Request dict keys: {list(request_dict.keys())}")
+    if 'next_task_details' in request_dict:
+        dict_task_details = request_dict.get('next_task_details')
+        logger.info(f"Method 2: Extracted next_task_details from dict: {dict_task_details}")
+        if next_task_details is None and dict_task_details is not None:
+            next_task_details = dict_task_details
+    
+    # Override from top-level fields for testing
+    if next_task_details is None or not isinstance(next_task_details, dict) or 'page_target' not in next_task_details:
+        # Create a valid next_task_details for testing
+        next_task_details = {
+            "title": "Reading Comprehension: Academic Passages",
+            "type": "practice",
+            "page_target": "reading_exercise",
+            "prompt_id": "read_comprehension_001"
+        }
+        logger.info(f"Created test next_task_details: {next_task_details}")
+    
     initial_graph_state: AgentGraphState = {
         "user_id": user_id,
         "user_token": request_data.usertoken,
@@ -212,7 +421,7 @@ async def process_interaction_route(request_data: InteractionRequest):
         "chat_history": chat_history,
         "question_stage": context.question_stage,
         "student_memory_context": None,
-        "next_task_details": None,
+        "next_task_details": next_task_details,
         "diagnosis_result": None,
         "output_content": None,
         "feedback_content": None,
@@ -240,17 +449,83 @@ async def process_interaction_route(request_data: InteractionRequest):
     }
 
     try:
-        return StreamingResponse(stream_graph_responses_sse(request_data), media_type="text/event-stream")
+        # Prepare config for LangGraph invocation
+        config = {
+            "configurable": {
+                "thread_id": session_id,
+                "user_id": user_id
+            }
+        }
+        
+        # Use regular ainvoke for non-streaming response
+        final_state = await toefl_tutor_graph.ainvoke(initial_graph_state, config=config)
+        
+        # Extract response components
+        # Log all state keys for debugging
+        logger.info(f"Final state keys: {list(final_state.keys()) if isinstance(final_state, dict) else 'Not a dict'}")
+        logger.info(f"Final next_task_details: {final_state.get('next_task_details')}")
+
+        # Extract final TTS text from the output
+        # First check if final_text_for_tts exists
+        text_for_tts = None
+        raw_pedagogy_output = None
+        raw_initial_report = None
+        raw_inactivity_output = None
+        
+        # First try to get from final_text_for_tts (preferred)
+        if "final_text_for_tts" in final_state:
+            text_for_tts = final_state["final_text_for_tts"]
+        # Then try to get from task_suggestion_llm_output if present
+        elif "task_suggestion_llm_output" in final_state and final_state["task_suggestion_llm_output"]:
+            pedagogy_output = final_state["task_suggestion_llm_output"]
+            if isinstance(pedagogy_output, dict) and "task_suggestion_tts" in pedagogy_output:
+                text_for_tts = pedagogy_output["task_suggestion_tts"]
+                raw_pedagogy_output = pedagogy_output
+        # Then check for initial_report_content
+        elif "initial_report_content" in final_state:
+            report_content = final_state["initial_report_content"]
+            if isinstance(report_content, dict) and "report_text" in report_content:
+                text_for_tts = report_content["report_text"]
+                raw_initial_report = report_content
+        # Finally check for inactivity output
+        elif "output_content" in final_state and isinstance(final_state.get("output_content", {}), dict):
+            output_content = final_state["output_content"]
+            if "text_for_tts" in output_content:
+                text_for_tts = output_content["text_for_tts"]
+                raw_inactivity_output = output_content
+        
+        if text_for_tts is None:
+            logger.warning(f"Non-streaming response has no text_for_tts available in keys: {list(final_state.keys())}")
+            text_for_tts = "I don't have a response at this time."
+
+        # Create response with proper field names according to InteractionResponse model
+        response = InteractionResponse(
+            response=text_for_tts,  # This is the main TTS field in InteractionResponse
+            ui_actions=final_state.get("final_ui_actions", []),
+            next_task_info=final_state.get("final_next_task_info"),
+            navigation_instruction=final_state.get("final_navigation_instruction"),
+            raw_initial_report_output=raw_initial_report,
+            # Add the following as extra fields (allowed by model_config={"extra": "allow"})
+            raw_pedagogy_output=raw_pedagogy_output,
+            raw_inactivity_output=raw_inactivity_output,
+            raw_teaching_output=final_state.get("raw_teaching_output"),
+            raw_modelling_output=final_state.get("raw_modelling_output"),
+            raw_feedback_output=final_state.get("raw_feedback_output")
+        )
+        
+        return response
     except Exception as e:
-        logger.error(f"Error in streaming endpoint: {e}", exc_info=True)
-        # It's important to raise HTTPException for FastAPI to handle it correctly
-        raise HTTPException(status_code=500, detail=f"Error processing streaming request: {str(e)}")
+        logger.error(f"Error in processing request: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 # Renamed original endpoint for non-streaming for clarity and to avoid conflict
 @app.post("/process_interaction_non_streaming", response_model=InteractionResponse)
 async def process_interaction_non_streaming_route(request_data: InteractionRequest):
     logger.info(f"Non-streaming request received for user '{request_data.current_context.user_id}' session '{request_data.session_id}'")
     try:
+        # Initialize state tracking variables
+        middleware_state = {}
+        
         initial_graph_state = AgentGraphState(
             user_id=request_data.current_context.user_id,
             session_id=request_data.session_id,
@@ -399,7 +674,7 @@ async def process_interaction_non_streaming_route(request_data: InteractionReque
         # logger.debug(f"InteractionResponse being sent with keys: {list(response.model_dump().keys())}")
 
 
-        return InteractionResponse(response=response_text, ui_actions=ui_actions_list, session_id=request_data.session_id)
+        return response
 
     except Exception as e:
 

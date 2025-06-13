@@ -31,16 +31,16 @@ async def inactivity_prompt_node(state: AgentGraphState) -> Dict[str, Any]:
 
         user_id = state.get("user_id", "student")
         current_context = state.get("current_context", {})
-        student_memory = state.get("student_memory_context", {})
+        student_memory = state.get("student_memory_context") or {}
         active_persona = state.get("active_persona", "Nurturer")
         chat_history = state.get("chat_history", [])
 
         student_name = student_memory.get("profile", {}).get("name", "Student")
 
         # Prepare student memory context for the prompt
-        student_memory_context = state.get("student_memory_context", {})
-        profile_data = student_memory_context.get("profile", {})
-        interaction_history = student_memory_context.get("interaction_history", [])
+        # Re-use the safely-loaded 'student_memory' variable.
+        profile_data = student_memory.get("profile", {})
+        interaction_history = student_memory.get("interaction_history", [])
 
         # Initialize/update user_id, student_name, task_stage from current_context
         current_context_obj = state.get("current_context")
@@ -81,7 +81,7 @@ async def inactivity_prompt_node(state: AgentGraphState) -> Dict[str, Any]:
         response_json = json.loads(response.text)
 
         updated_student_memory = {
-            **student_memory_context,
+            **student_memory,
             "last_ai_action_on_p1": "sent_inactivity_prompt_waiting_for_reply"
         }
 

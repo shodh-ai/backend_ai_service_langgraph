@@ -1,4 +1,7 @@
+import logging
 import json
+
+pedagogy_logger = logging.getLogger(__name__) # Changed to __name__ for consistency
 from state import AgentGraphState
 import logging
 import os
@@ -9,10 +12,6 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 
-script_dir = os.path.dirname(__file__)
-file_path = os.path.join(script_dir, '..', 'data', 'pedagogy.csv')
-df = pd.read_csv(file_path)
-embedding_model = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
 query_columns = [
     "Answer One",
     "Answer Two",
@@ -24,24 +23,48 @@ query_columns = [
     "Grammar",
     "Vocabulary",
 ]
-df["combined_text_for_embedding"] = df[query_columns].astype(str).agg(" ".join, axis=1)
-langchain_documents = []
-for index, row in df.iterrows():
-    page_content = row["combined_text_for_embedding"]
-    metadata = row.drop("combined_text_for_embedding").to_dict()
-    langchain_documents.append(Document(page_content=page_content, metadata=metadata))
 
-vectorstore = Chroma.from_documents(
-    documents=langchain_documents,
-    embedding=embedding_model,
-    persist_directory="data/pedagogy_chroma",
-)
+vectorstore = None
+embedding_model = None # Will be initialized by get_pedagogy_vectorstore
 
+def get_pedagogy_vectorstore():
+    global vectorstore, embedding_model
+    if vectorstore is None:
+        pedagogy_logger.info("PEDAGOGY_GENERATOR.PY: Initializing pedagogy vectorstore for the first time...")
+        script_dir = os.path.dirname(__file__)
+        file_path = os.path.join(script_dir, '..', 'data', 'pedagogy_data.csv')
+        
+        pedagogy_logger.info(f"PEDAGOGY_GENERATOR.PY: Reading CSV from {file_path}...")
+        df = pd.read_csv(file_path)
+        pedagogy_logger.info("PEDAGOGY_GENERATOR.PY: Finished reading CSV.")
+
+        pedagogy_logger.info("PEDAGOGY_GENERATOR.PY: Initializing GoogleGenerativeAIEmbeddings...")
+        embedding_model = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+        pedagogy_logger.info("PEDAGOGY_GENERATOR.PY: Initialized GoogleGenerativeAIEmbeddings.")
+
+        df["combined_text_for_embedding"] = df[query_columns].astype(str).agg(" ".join, axis=1)
+        langchain_documents = []
+        pedagogy_logger.info("PEDAGOGY_GENERATOR.PY: Preparing documents for Chroma...")
+        for index, row in df.iterrows():
+            page_content = row["combined_text_for_embedding"]
+            metadata = row.drop("combined_text_for_embedding").to_dict()
+            langchain_documents.append(Document(page_content=page_content, metadata=metadata))
+        pedagogy_logger.info("PEDAGOGY_GENERATOR.PY: Finished preparing documents.")
+
+        pedagogy_logger.info("PEDAGOGY_GENERATOR.PY: Calling Chroma.from_documents()...")
+        vectorstore = Chroma.from_documents(
+            documents=langchain_documents,
+            embedding=embedding_model,
+            persist_directory="data/pedagogy_chroma",
+        )
+        pedagogy_logger.info("PEDAGOGY_GENERATOR.PY: Finished Chroma.from_documents(). Vectorstore initialized.")
+    return vectorstore
 
 def query_similar_documents(query_values):
     print(query_values)
+    current_vectorstore = get_pedagogy_vectorstore()
     query_text = " ".join([str(query_values[col]) for col in query_columns])
-    similar_documents = vectorstore.similarity_search(query_text, k=10)
+    similar_documents = current_vectorstore.similarity_search(query_text, k=10)
     print(f"Top 10 similar rows to your query:\n---")
     metadata_list = []
     for i, doc in enumerate(similar_documents):

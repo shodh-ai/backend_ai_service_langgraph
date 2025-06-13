@@ -83,11 +83,38 @@ async def format_final_output_for_client_node(state: AgentGraphState) -> Dict[st
     
     if not conversational_tts.strip():
         logger.info(f"{node_name}: No effective conversational TTS found. Will be empty string for tts_parts.")
-        conversational_tts = ""
+
+    # Handle initial report content
+    initial_report_content = state.get("initial_report_content")
+    text_for_tts = ""
+    if initial_report_content and isinstance(initial_report_content, dict) and initial_report_content.get("report_text"):
+        text_for_tts = initial_report_content.get("report_text")
+        logger.info(f"{node_name}: Using text from initial_report_content.")
+
+    # Priority 2: Inactivity Prompt
+    if not text_for_tts:
+        output_content = state.get("output_content", {})
+        if isinstance(output_content, dict) and output_content.get("text_for_tts"):
+            text_for_tts = output_content["text_for_tts"]
+            logger.info(f"{node_name}: Using text from output_content.text_for_tts (inactivity prompt).")
+
+
+    # Priority 3: Pedagogy Output (e.g., task suggestion)
+    if not text_for_tts:
+        pedagogy_output = state.get("task_suggestion_llm_output", {})
+        if isinstance(pedagogy_output, dict) and pedagogy_output.get("task_suggestion_tts"):
+            text_for_tts = pedagogy_output["task_suggestion_tts"]
+            logger.info(f"{node_name}: Using text from pedagogy_output.task_suggestion_tts.")
+
+
+    # Fallback to the general conversational TTS content
+    if not text_for_tts and conversational_tts:
+        text_for_tts = conversational_tts
+        logger.info(f"{node_name}: Using fallback text from conversational_tts.")
 
     tts_parts = []
-    if conversational_tts:
-        tts_parts.append(conversational_tts)
+    if text_for_tts:
+        tts_parts.append(text_for_tts)
     
     consolidated_tts = " ".join(filter(None, tts_parts))
     logger.info(f"{node_name}: TTS parts collected: {tts_parts}")
@@ -227,10 +254,18 @@ async def format_final_output_for_client_node(state: AgentGraphState) -> Dict[st
         client_response_data["raw_pedagogy_output"] = raw_pedagogy
         logger.info(f"{node_name}: Included 'raw_pedagogy_output'.")
 
+    raw_initial_report = state.get("initial_report_content")
+    if raw_initial_report:
+        client_response_data["raw_initial_report_output"] = raw_initial_report
+        logger.info(f"{node_name}: Included 'raw_initial_report_output'.")
+
     # Log summary of keys being returned
     logger.info(f"{node_name}: Final client response data keys: {list(client_response_data.keys())}")
     # Example of logging full content if small, or specific important parts:
     # logger.debug(f"{node_name}: Full client_response_data: {client_response_data}")
+
+    logger.info(f"{node_name}: Value of 'raw_pedagogy_output' in returned dict: {client_response_data.get('raw_pedagogy_output')}")
+    logger.info(f"{node_name}: Type of 'raw_pedagogy_output' in returned dict: {type(client_response_data.get('raw_pedagogy_output'))}")
     
     return client_response_data
 

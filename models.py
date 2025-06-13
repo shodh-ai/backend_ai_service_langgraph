@@ -114,6 +114,7 @@ class ReactUIAction(BaseModel):  # RENAMED from DomAction
 from pydantic import BaseModel, Field, Extra  # Ensure Extra is imported
 
 class InteractionResponse(BaseModel):
+    raw_initial_report_output: Optional[Dict[str, Any]] = Field(default=None, description="The full, raw JSON output from the initial report generation node.")
     """
     The main response object sent from the FastAPI/LangGraph backend
     back to the LiveKit Agent Service (and then relayed to the frontend).

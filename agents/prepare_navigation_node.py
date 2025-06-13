@@ -37,32 +37,83 @@ async def prepare_navigation_node(state: AgentGraphState) -> Dict[str, Any]:
                 generation_config=GenerationConfig(response_mime_type="application/json"),
             )
 
-            student_memory = state.get("student_memory_context", {})
-            student_name = student_memory.get("profile", {}).get("name", "there") # Default to 'there' if name not found
+            # Get comprehensive student memory context
+            student_memory = state.get("student_memory_context")
+            
+            # Add null checking to prevent NoneType errors
+            if student_memory is None:
+                student_memory = {}
+                logger.warning("Student memory context is None, using empty dictionary for navigation")
+                
+            profile = student_memory.get("profile", {})
+            student_name = profile.get("name", "there") # Default to 'there' if name not found
+            interaction_history = student_memory.get("interaction_history", [])
             active_persona = state.get("active_persona", "Nurturer")
             
+            # Extract task details
             task_title = next_task_details.get("title", "the selected task")
             task_type = next_task_details.get("type", "activity")
 
+            # Get student level and preferences if available
+            student_level = profile.get("level", "")
+            student_preferences = profile.get("preferences", {})
+            student_focus_areas = profile.get("focus_areas", [])
+            
+            # Extract recent progress or relevant context from interaction history
+            recent_task_info = ""
+            if interaction_history and isinstance(interaction_history, list) and len(interaction_history) > 0:
+                try:
+                    # Get most recent interaction
+                    last_interaction = interaction_history[-1]
+                    if isinstance(last_interaction, dict):
+                        # If there was a previous task, include information about it
+                        last_task = last_interaction.get("task_details", {})
+                        if last_task and isinstance(last_task, dict):
+                            last_title = last_task.get("title", "")
+                            if last_title and last_title != task_title:
+                                recent_task_info = f"They just completed '{last_title}'."
+                except Exception as e:
+                    logger.warning(f"Error extracting recent task info: {e}")
+
+            # Build enriched prompt with memory context
             prompt_parts = [
                 f"You are Rox, an AI TOEFL Tutor, speaking as the '{active_persona}' persona.",
                 f"The student, {student_name}, has just confirmed they are ready to start the following task/lesson:",
                 f"Task Title: '{task_title}'",
-                f"Task Type: '{task_type}'",
+                f"Task Type: '{task_type}'"
+            ]
+            
+            # Add relevant profile information
+            if student_level:
+                prompt_parts.append(f"Student Level: {student_level}")
+            
+            if student_focus_areas and isinstance(student_focus_areas, list) and len(student_focus_areas) > 0:
+                prompt_parts.append(f"Student Focus Areas: {', '.join(student_focus_areas)}")
+                
+            # Add recent task context if available
+            if recent_task_info:
+                prompt_parts.append(recent_task_info)
+                
+            # Instructions for response
+            prompt_parts.extend([
                 "Generate a brief, encouraging, and clear transitional phrase to say to the student as you navigate them to this task.",
+                "The transition should feel natural and personalized based on their profile and history.",
                 "Keep it concise (1 sentence).",
                 "Return JSON: {\"text_for_tts\": \"<your transitional phrase>\"}"
-            ]
+            ])
+            
+            # Process the prompt and get response
             prompt = "\n".join(prompt_parts)
             logger.debug(f"Prepare Navigation LLM Prompt:\n{prompt}")
             response = await model.generate_content_async(prompt)
             response_json = json.loads(response.text)
             tts_text = response_json.get("text_for_tts", f"Okay, {student_name}, let's move on to {task_title}!")
         except Exception as e:
-            logger.error(f"Error in prepare_navigation_node LLM call: {e}", exc_info=True)
+            logger.error(f"Error in prepare_navigation_node LLM processing: {e}", exc_info=True)
+            # Fallback to templated response if LLM initialization or processing fails
             task_title_fallback = next_task_details.get("title", "your next activity")
-            student_name_fallback = state.get("student_memory_context", {}).get("profile", {}).get("name", "there")
-            tts_text = f"Great, {student_name_fallback}! Taking you to '{task_title_fallback}' now."
+            student_name_fallback = state.get("student_memory_context", {}).get("profile", {}).get("name", "there") 
+            tts_text = f"Great, {student_name_fallback}! Let's move on to {task_title_fallback}."
 
     # Construct NAVIGATE_TO_PAGE UI Action
     page_target = next_task_details.get("page_target")
@@ -97,6 +148,7 @@ async def prepare_navigation_node(state: AgentGraphState) -> Dict[str, Any]:
 
     # Optionally update student memory
     updated_student_memory = state.get("student_memory_context", {})
+    
     if isinstance(updated_student_memory, dict):
       updated_student_memory["last_ai_action_on_p1"] = f"navigated_to_task_{next_task_details.get('title', 'unknown')}"
 

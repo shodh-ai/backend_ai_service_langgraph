@@ -69,30 +69,94 @@ class Mem0Client:
             logger.error(f"Mem0Client: Error in add method: {e}", exc_info=True)
             raise
 
-    def get_all(self, user_id: str) -> List[Dict[str, Any]]:
-        logger.debug(f"Mem0Client: Calling get_all for user_id: {user_id}")
+    def get_all(self, user_id: str, page: int = 1, page_size: int = 100, output_format: str = 'v1.1') -> Dict[str, Any]:
+        """Get all memories for a user with pagination support.
+        
+        Args:
+            user_id (str): The user ID to get memories for
+            page (int, optional): Page number for pagination. Defaults to 1.
+            page_size (int, optional): Number of items per page. Defaults to 100.
+            output_format (str, optional): Format version for the output. Defaults to 'v1.1'.
+            
+        Returns:
+            Dict[str, Any]: Paginated memories or list of memories depending on the output format
+        """
+        logger.debug(f"Mem0Client: Calling get_all for user_id: {user_id}, page: {page}, page_size: {page_size}")
         try:
-            # The MemoryClient().get_all() might return a different structure or need different handling.
-            # Assuming it's similar to mem0.Memory().get_all() for now.
-            # Refer to Mem0Client documentation if issues arise.
-            raw_memories = self.mem0_instance.get_all(user_id=user_id)
-            # Ensure the output format is consistent if it differs, e.g. by wrapping in {'results': raw_memories}
-            # For now, assuming it returns a list directly, or an object with a 'results' key like before.
-            if isinstance(raw_memories, dict) and 'results' in raw_memories:
-                 return raw_memories # Matches previous structure
+            # The latest Mem0 API supports pagination and output format
+            raw_memories = self.mem0_instance.get_all(
+                user_id=user_id, 
+                page=page, 
+                page_size=page_size, 
+                output_format=output_format
+            )
+            
+            # Handle different return formats for backward compatibility
+            if isinstance(raw_memories, dict):
+                if 'results' in raw_memories:
+                    return raw_memories  # v1.1 format with pagination already included
+                elif 'memories' in raw_memories:
+                    # Newer format with different structure
+                    return {'results': raw_memories['memories']}
             elif isinstance(raw_memories, list):
-                 return {'results': raw_memories} # Adapt if it returns a list directly
-            logger.warning(f"Mem0Client: get_all returned unexpected format: {type(raw_memories)}. Adjust if needed.")
-            return raw_memories # Fallback, might need adjustment
+                # v1.0 format returns a list directly, wrap it
+                return {'results': raw_memories}
+                
+            logger.warning(f"Mem0Client: get_all returned unexpected format: {type(raw_memories)}. Returning as is.")
+            return raw_memories  # Return whatever we got
 
         except Exception as e:
             logger.error(f"Mem0Client: Error in get_all method: {e}", exc_info=True)
             raise
 
-    def search(self, query: str, user_id: str, limit: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        logger.debug(f"Mem0Client: Calling search for user_id: {user_id} with query: {query}, limit: {limit}, metadata: {metadata}")
+    def search(self, query: str, user_id: str = None, agent_id: str = None, limit: Optional[int] = None, 
+              metadata: Optional[Dict[str, Any]] = None, categories: Optional[List[str]] = None,
+              version: str = None, filters: Optional[Dict[str, Any]] = None,
+              threshold: float = 0.1, output_format: str = 'v1.1') -> Dict[str, Any]:
+        """Search memories using semantic search with enhanced filter options.
+        
+        Args:
+            query (str): The search query
+            user_id (str, optional): User ID to search memories for
+            agent_id (str, optional): Agent ID to search memories for
+            limit (int, optional): Max number of results to return
+            metadata (Dict, optional): Metadata filter
+            categories (List[str], optional): Categories filter
+            version (str, optional): API version to use ('v1' or 'v2')
+            filters (Dict, optional): Advanced filters for v2 search
+            threshold (float, optional): Similarity threshold
+            output_format (str, optional): Format version for output
+            
+        Returns:
+            Dict[str, Any]: Search results
+        """
+        logger.debug(f"Mem0Client: Calling search with query: '{query}', user_id: '{user_id}', "
+                   f"agent_id: '{agent_id}', filters: {filters}")
         try:
-            return self.mem0_instance.search(query=query, user_id=user_id, limit=limit, metadata=metadata)
+            # Build search parameters based on what's provided
+            search_params = {
+                'query': query,
+                'threshold': threshold,
+                'output_format': output_format
+            }
+            
+            # Add optional parameters if provided
+            if user_id:
+                search_params['user_id'] = user_id
+            if agent_id:
+                search_params['agent_id'] = agent_id
+            if limit:
+                search_params['limit'] = limit
+            if metadata:
+                search_params['metadata'] = metadata
+            if categories:
+                search_params['categories'] = categories
+            if version:
+                search_params['version'] = version
+            if filters:
+                search_params['filters'] = filters
+                
+            return self.mem0_instance.search(**search_params)
         except Exception as e:
             logger.error(f"Mem0Client: Error in search method: {e}", exc_info=True)
             raise

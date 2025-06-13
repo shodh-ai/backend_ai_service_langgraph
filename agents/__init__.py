@@ -1,4 +1,5 @@
 # agents/__init__.py
+import logging
 
 # Student model nodes
 from .student_model_node import load_student_data_node, save_interaction_node
@@ -60,12 +61,6 @@ from .teaching_rag_node import teaching_rag_node
 from .teaching_delivery_node import teaching_delivery_node # This might become obsolete or repurposed
 from .teaching_generator_node import teaching_generator_node
 
-# Scaffolding nodes
-from .scaffolding_student_data import scaffolding_student_data_node
-from .struggle_analyzer import struggle_analyzer_node
-from .scaffolding_retriever import scaffolding_retriever_node
-from .scaffolding_planner import scaffolding_planner_node
-from .scaffolding_generator import scaffolding_generator_node
 
 # Cowriting nodes
 from .cowriting_student_data import cowriting_student_data_node

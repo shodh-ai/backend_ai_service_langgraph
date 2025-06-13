@@ -78,6 +78,15 @@ class AgentGraphState(TypedDict, total=False):
         Dict[str, Any]
     ]  # Contains text_for_tts, ui_actions, and frontend_rpc_calls
 
+    # Raw outputs from various systems, passed through by OutputFormatterNode
+    # These are intended for the client response but also need to be in state 
+    # if subsequent internal nodes (e.g. for saving to memory) need them.
+    raw_teaching_output: Optional[Dict[str, Any]]
+    raw_modelling_output: Optional[Dict[str, Any]]
+    raw_feedback_output: Optional[Dict[str, Any]]
+    raw_pedagogy_output: Optional[Dict[str, Any]]
+    initial_report_content: Optional[Dict[str, Any]]
+
     # For backward compatibility during transition
     feedback_content: Optional[
         Dict[str, Any]

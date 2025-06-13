@@ -36,7 +36,9 @@ async def motivational_support_node(state: AgentGraphState) -> Dict[str, Any]:
         current_context = state.get("current_context")
         task_stage = getattr(current_context, 'task_stage', 'unknown_stage')
         
-        student_memory = state.get("student_memory_context", {})
+        student_memory = state.get("student_memory_context")
+        if student_memory is None:
+            student_memory = {}
         affective_state = student_memory.get("affective_state", "neutral")
         student_name = student_memory.get("name", "Student")
         active_persona = state.get("active_persona", "Nurturer") # Default to Nurturer if not set
