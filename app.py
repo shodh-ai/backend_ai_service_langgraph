@@ -15,6 +15,10 @@ import json
 import asyncio
 import os
 from dotenv import load_dotenv
+from typing import Dict, Any, Optional, List # Keep for models if not fully typed
+from pydantic import BaseModel, Field
+from memory import mem0_memory # Import the shared instance
+
 load_dotenv()
 print(f"--- DEBUG: MEM0_API_KEY is set to: {os.getenv('MEM0_API_KEY')} ---")
 from typing import Dict, Any, Optional, List
@@ -62,6 +66,34 @@ app.add_middleware(
 
 # Initialize the graph when the application starts
 toefl_tutor_graph = build_graph()
+
+class UserRegistrationRequest(BaseModel):
+    user_id: str = Field(..., description="The unique identifier for the user.")
+    name: str
+    goal: str
+    feeling: str
+    confidence: str
+
+@app.post("/user/register")
+async def register_user(registration_data: UserRegistrationRequest):
+    logger.info(f"Received registration data for user_id: {registration_data.user_id}")
+    try:
+        # The data from the form is already in a dictionary-like object.
+        # We can convert it to a dict, excluding the user_id as that's the key for memory.
+        profile_data = registration_data.dict(exclude={"user_id"})
+        
+        # Use the existing mem0_memory instance to update the student's profile
+        mem0_memory.update_student_profile(
+            user_id=registration_data.user_id,
+            profile_data=profile_data
+        )
+        
+        logger.info(f"Successfully stored profile for user_id: {registration_data.user_id}")
+        return {"message": "User profile stored successfully."}
+    except Exception as e:
+        logger.error(f"Failed to store user profile for {registration_data.user_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to store user profile.")
+
 
 
 async def stream_graph_responses_sse(request_data: InteractionRequest):
