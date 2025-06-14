@@ -4,6 +4,8 @@ import logging
 import uuid
 from dotenv import load_dotenv
 from typing import Dict, Any, Optional, List
+import socketio
+import asyncio
 from graph_builder import build_graph
 from state import AgentGraphState
 from models import (
@@ -12,6 +14,9 @@ from models import (
     InteractionRequestContext,
     ReactUIAction,
 )
+import io
+import base64
+from gtts import gTTS
 
 # Configure basic logging for the application
 # This will set the root logger level and format, affecting all module loggers unless they are specifically configured otherwise.
@@ -24,6 +29,21 @@ load_dotenv()
 logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI(title="TOEFL Tutor AI Backend", version="0.1.0")
+
+# Create a Socket.IO server instance
+sio = socketio.AsyncServer(
+    async_mode='asgi',
+    cors_allowed_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # Allow connections from Next.js frontend
+    logger=True,  # Enable logging
+    engineio_logger=True  # Enable Engine.IO logging
+)
+
+# Create a Socket.IO ASGI application
+socket_app = socketio.ASGIApp(
+    socketio_server=sio,
+    other_asgi_app=app,
+    socketio_path='socket.io'  # This matches the client's default path
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -167,8 +187,91 @@ async def health_check():
     return {"status": "healthy"}
 
 
+# Socket.IO event handlers
+@sio.event
+async def connect(sid, environ):
+    print(f"Client connected: {sid}")
+    # You can add any connection logic here
+    await sio.emit('welcome', {'data': 'Welcome to the Rox AI backend!'}, room=sid)
+
+@sio.event
+async def disconnect(sid):
+    print(f"Client disconnected: {sid}")
+
+@sio.event
+async def message(sid, data):
+    print(f"Message from {sid}: {data}")
+    # Echo the message back to the client
+    await sio.emit('response', {'response': f"Server received: {data}"}, room=sid)
+
+# Helper function to convert text to audio base64
+async def text_to_audio_base64(text: str) -> str:
+    """Convert text to audio and return base64 encoded string"""
+    try:
+        # Create a bytes buffer to store the audio
+        audio_buffer = io.BytesIO()
+        
+        # Generate audio from text using gTTS
+        tts = gTTS(text=text, lang='en', slow=False)
+        tts.write_to_fp(audio_buffer)
+        audio_buffer.seek(0)
+        
+        # Encode audio to base64
+        audio_data = audio_buffer.read()
+        base64_audio = base64.b64encode(audio_data).decode('utf-8')
+        
+        # Return data URL format that can be directly used in an audio element
+        return f"data:audio/mp3;base64,{base64_audio}"
+    except Exception as e:
+        logging.error(f"Error generating audio: {e}")
+        return ""
+
+@sio.event
+async def send_message(sid, data):
+    print(f"Send message from {sid}: {data}")
+    
+    # Process the message using your existing AI logic if needed
+    try:
+        # Extract the message and check if audio is requested
+        user_message = data.get('message', '')
+        audio_requested = data.get('audio_response_requested', False)
+        
+        # Generate AI response (in a real app, this would call your AI model)
+        ai_response = f"I understand your question about '{user_message}'. Here's what I can tell you: This is a simulated AI response that would normally contain relevant information about your query. I've analyzed your question and can provide detailed insights. For example, if you asked about course summary, I would give you statistics about your progress, areas of strength, and suggestions for improvement."
+        
+        # Send text response
+        await sio.emit('ai_response', {
+            'response': ai_response,
+            'type': 'text'
+        }, room=sid)
+        
+        # If audio is requested, generate and send audio response
+        if audio_requested:
+            # Split the response into smaller chunks to send separately
+            # This simulates streaming audio in chunks
+            sentences = ai_response.split('.')
+            for i, sentence in enumerate(sentences):
+                if sentence.strip():
+                    # Convert this sentence to audio
+                    audio_data = await text_to_audio_base64(sentence + '.')
+                    
+                    # Send audio chunk to client
+                    if audio_data:
+                        await sio.emit('ai_audio', {
+                            'audio': audio_data,
+                            'chunk_index': i,
+                            'total_chunks': len(sentences)
+                        }, room=sid)
+                        
+                        # Small delay to simulate streaming
+                        await asyncio.sleep(0.2)
+    except Exception as e:
+        print(f"Error processing message: {e}")
+        await sio.emit('error', {'error': str(e)}, room=sid)
+
 if __name__ == "__main__":
     import uvicorn
     import os
 
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "5005")))
+    # Use the Socket.IO app instead of just the FastAPI app
+    uvicorn.run(socket_app, host="0.0.0.0", port=int(os.getenv("PORT", "5005")))
