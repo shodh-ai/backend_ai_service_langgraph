@@ -27,7 +27,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Expose the port the app runs on
-EXPOSE 5005
+EXPOSE 8001
 
 # Command to run the Uvicorn server
 # Using shell form of CMD to allow environment variable expansion
