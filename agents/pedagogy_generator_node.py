@@ -163,7 +163,7 @@ async def pedagogy_generator_node(state: AgentGraphState) -> dict:
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(
-            "gemini-1.5-flash",
+            "gemini-2.0-flash",
             generation_config=GenerationConfig(response_mime_type="application/json"),
         )
         response = model.generate_content(prompt)

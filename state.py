@@ -3,6 +3,14 @@ from typing import TypedDict, List, Dict, Any, Optional
 # This is the single source of truth for the entire graph's memory.
 # Every key that any node reads or writes MUST be defined here.
 
+    # ... all other fields ...
+    # NEW: A dictionary to control the RAG node’s behavior for the current step
+
+    # Example: {“category”: “teaching_strategy”, “query_text”: “...“, “top_k”: 3}
+    # Example: {“category”: “scaffolding_content”, “query_text”: “...“, “top_k”: 2}
+    # Field to store the result
+
+
 AgentGraphState = TypedDict('AgentGraphState', {
     # === Core Identifiers ===
     'user_id': str,
@@ -11,7 +19,8 @@ AgentGraphState = TypedDict('AgentGraphState', {
     'current_context': Dict[str, Any],
     'chat_history': List[Dict[str, Any]],
     'user_token': str,
-
+    'rag_query_config': Optional[Dict[str, Any]],
+    'rag_retrieved_documents': Optional[List[Dict[str, Any]]],
     # === Universal Input/Output Keys ===
     'transcript': Optional[str],
     'final_text_for_tts': Optional[str],
@@ -46,6 +55,11 @@ AgentGraphState = TypedDict('AgentGraphState', {
     'Learning_Objective_Focus': Optional[str], # Also used by Cowriting
     'STUDENT_PROFICIENCY': Optional[str],
     'STUDENT_AFFECTIVE_STATE': Optional[str],
+
+    # -- Teaching Plan State --
+    'pedagogical_plan': Optional[List[Dict[str, Any]]],
+    'current_plan_step_index': int,
+    'current_plan_active': bool,
 
     # -- Scaffolding --
     'Learning_Objective_Task': Optional[str],

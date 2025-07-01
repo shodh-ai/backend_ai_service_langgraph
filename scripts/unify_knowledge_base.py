@@ -107,11 +107,11 @@ def unify_and_standardize_cta_data():
                 original_row_dict = row.to_dict()
                 metadata = {k.strip(): str(v) for k, v in original_row_dict.items()}
                 
-                # --- THIS IS THE CRITICAL FIX ---
-                # Add the 'category' key directly INTO the metadata dictionary.
                 metadata['category'] = category
+
+                if 'LESSON_ID' in df.columns:
+                    metadata['lesson_id'] = str(row.get('LESSON_ID', ''))
                 
-                # The top-level object only needs these two keys for the ingest script.
                 standardized_record = {
                     "document_for_embedding": embedding_doc,
                     "metadata": metadata 

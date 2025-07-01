@@ -40,18 +40,17 @@ async def router_entry_node(state: AgentGraphState) -> dict:
 
 async def initial_router_logic(state: AgentGraphState) -> str:
     task_name = state.get("task_name")
-    if not task_name:
-        context = state.get("current_context", {})
+    current_context = state.get("current_context", {})
 
-        task_name = context.task_stage
+    if not task_name:
+        # Use .get() for safety
+        task_name = current_context.get("task_stage")
 
     # If still nothing, default to conversation
-
     if not task_name:
         task_name = "handle_conversation"
     
     logger.info(f"INITIAL ROUTER: Evaluating route. Final determined Task Name: '{task_name}'")
-
 
     routing_map = {
         "handle_student_response": NODE_CONVERSATION_HANDLER,
@@ -59,16 +58,32 @@ async def initial_router_logic(state: AgentGraphState) -> str:
         "acknowledge_interruption": NODE_ACKNOWLEDGE_INTERRUPT,
         "handle_page_load": NODE_HANDLE_WELCOME,
         "start_modelling_activity": NODE_MODELING_MODULE,
-        "request_teaching_lesson": NODE_TEACHING_MODULE,
+        "request_teaching_lesson": NODE_TEACHING_MODULE, # Old, for reference
+        "initiate_teaching_session": NODE_TEACHING_MODULE, # New task name
+        "TEACHING_PAGE_INIT": NODE_TEACHING_MODULE, # From task_stage
+        "TEACHING_PAGE_QA": NODE_TEACHING_MODULE, # From task_stage during QA
         "scaffolding_needed": NODE_SCAFFOLDING_MODULE,
         "feedback_needed": NODE_FEEDBACK_MODULE,
         "initiate_cowriting": NODE_COWRITING_MODULE,
         "initiate_pedagogy": NODE_PEDAGOGY_MODULE,
         "handle_student_clarification_question": NODE_CONVERSATION_HANDLER,
     }
+    # --- Start Debug Logging ---
+    logger.info(f"DEBUG: task_name is '{task_name}' (type: {type(task_name)})" )
+    logger.info(f"DEBUG: routing_map keys are: {list(routing_map.keys())}")
+    key_exists = task_name in routing_map
+    logger.info(f"DEBUG: Does task_name exist as a key in routing_map? {key_exists}")
+    # --- End Debug Logging ---
+
     route_destination = routing_map.get(task_name, NODE_CONVERSATION_HANDLER)
 
-        
+    # --- Add lesson_id to context if routing to teaching module ---
+    if route_destination == NODE_TEACHING_MODULE:
+        lesson_id = current_context.get("lesson_id")
+        if lesson_id:
+            state["current_context"] = {**current_context, "lesson_id": lesson_id}
+            logger.info(f"Extracted lesson_id '{lesson_id}' for teaching module.")
+
     logger.info(f"INITIAL ROUTER: Final decision. Routing to -> [{route_destination}]")
     return route_destination
 

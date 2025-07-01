@@ -126,68 +126,49 @@ class UserRegistrationRequest(BaseModel):
     goal: str
     feeling: str
     confidence: str
-def create_initial_state(request_data: InvokeTaskRequest) -> AgentGraphState:
+
+async def create_initial_state(request_data: InvokeTaskRequest) -> AgentGraphState:
     """
-    Takes the incoming universal request and builds the complete,
-    fully populated state for the LangGraph. This is the single source of truth
-    for the graph's starting conditions.
+    Build the state for *this turn only* from the incoming request.
+    No attempt is made to load or merge prior state – LangGraph's
+    checkpointer handles persistence and merging automatically.
     """
-    payload = json.loads(request_data.json_payload)
+    # 1. Parse the incoming JSON payload safely
+    try:
+        payload = json.loads(request_data.json_payload)
+    except json.JSONDecodeError:
+        logger.error("Failed to decode json_payload. Using empty payload.")
+        payload = {}
+
+    # 2. Core identifiers
     user_id = payload.get("user_id", "unknown_user")
     session_id = payload.get("session_id", str(uuid.uuid4()))
 
-    # --- This is the final, complete logic for state creation ---
-    # It explicitly unpacks all known context fields from ALL possible flows.
-    
-    initial_state = {
-        # Core Identifiers
+    # 3. Current turn context (can be empty or partial)
+    current_context = payload.get("current_context", {})
+    # Ensure at minimum the user_id is present for downstream logic
+    current_context.setdefault("user_id", user_id)
+
+    # 4. Determine task_name for routing. Prefer the explicit `task_name` from the request object,
+    #    but fall back to any task_stage present in the current_context.
+    task_name = request_data.task_name or current_context.get("task_stage")
+
+    logger.info(f"[create_initial_state] Building turn state for task: '{task_name}' | session_id: '{session_id}'")
+
+    # 5. Construct the minimal state dict. Fields not set here will be
+    #    populated by the graph or restored from the checkpoint after merge.
+    initial_state: AgentGraphState = {
         "user_id": user_id,
         "session_id": session_id,
-        "task_name": request_data.task_name,
-        "transcript": payload.get("transcript"), 
-        # --- Unpack all known context fields from the payload ---
-        
-        # Cowriting Flow Fields
-        "Learning_Objective_Focus": payload.get("Learning_Objective_Focus"),
-        "Student_Written_Input_Chunk": payload.get("transcript"),
-        "Immediate_Assessment_of_Input": payload.get("Immediate_Assessment_of_Input"),
-        "Student_Articulated_Thought": payload.get("Student_Articulated_Thought"), # Added this for completeness
-        
-        # Modelling Flow Fields
-        "example_prompt_text": payload.get("example_prompt_text"),
-        "student_struggle_context": payload.get("student_struggle_context"),
-        "english_comfort_level": payload.get("english_comfort_level"),
-        "student_goal_context": payload.get("student_goal_context"),
-        "student_confidence_context": payload.get("student_confidence_context"),
-        "teacher_initial_impression": payload.get("teacher_initial_impression"),
+        "task_name": task_name,
 
-        # Teaching Flow Fields
-        "STUDENT_PROFICIENCY": payload.get("STUDENT_PROFICIENCY"),
-        "STUDENT_AFFECTIVE_STATE": payload.get("STUDENT_AFFECTIVE_STATE"),
-        
-        # Scaffolding Flow Fields
-        "Learning_Objective_Task": payload.get("Learning_Objective_Task"),
-        "Specific_Struggle_Point": payload.get("Specific_Struggle_Point"),
-        "Student_Attitude_Context": payload.get("Student_Attitude_Context"),
-
-        # Feedback Flow Fields
-        "Task": payload.get("Task"),
-        "Proficiency": payload.get("Proficiency"),
-        "Error": payload.get("Error"),
-        "Behavior Factor": payload.get("Behavior Factor"),
-        "diagnosed_error_type": payload.get("diagnosed_error_type"),
-
-        # Pedagogy Flow Fields
-        "Answer One": payload.get("Answer One"),
-        "Answer Two": payload.get("Answer Two"),
-        "Answer Three": payload.get("Answer Three"),
-        "Initial Impression": payload.get("Initial Impression"),
-        "Speaking Strengths": payload.get("Speaking Strengths"),
-
-        # --- Default initializations for all other state keys ---
-        "transcript": payload.get("transcript"), 
-        "current_context": {"user_id": user_id, "task_stage": request_data.task_name},
+        # Turn-specific inputs
+        "transcript": payload.get("transcript"),
         "chat_history": payload.get("chat_history", []),
+        "current_context": current_context,
+
+        # Place-holders / defaults for the remainder of the AgentGraphState keys.
+        # They will either be set by nodes or restored by the checkpointer merge.
         "rag_document_data": [],
         "intermediate_modelling_payload": None,
         "intermediate_teaching_payload": None,
@@ -195,16 +176,7 @@ def create_initial_state(request_data: InvokeTaskRequest) -> AgentGraphState:
         "intermediate_feedback_payload": None,
         "intermediate_cowriting_payload": None,
         "intermediate_pedagogy_payload": None,
-        "final_flow_output": None,
-        "final_text_for_tts": None,
-        "final_ui_actions": [],
-        "error_message": None,
-        "route_to_error_handler": False,
     }
-    
-    logger.info(f"Created initial state with populated context for task: '{request_data.task_name}'")
-    logger.debug(f"Initial state includes Student_Written_Input_Chunk: '{initial_state.get('Student_Written_Input_Chunk')}'")
-    logger.info(f"Created initial state. Transcript found: {bool(initial_state.get('transcript'))}")
 
     return initial_state
 
@@ -215,10 +187,10 @@ async def invoke_task_streaming_route(request_data: InvokeTaskRequest):
     This is the new, preferred entry point.
     """
     try:
-        initial_graph_state = create_initial_state(request_data)
+        initial_graph_state = await create_initial_state(request_data)
 
         # Create the config for the graph invocation, which is essential for memory
-        config = {"configurable": {"thread_id": initial_graph_state.get("session_id")}}
+        config = {"configurable": {"thread_id": initial_graph_state.get("session_id")}, "recursion_limit": 50}
 
         # Call the SSE streamer with the prepared state and config
         return StreamingResponse(
@@ -365,6 +337,11 @@ async def process_interaction_streaming_route(request_data: InteractionRequest):
         "feeling": getattr(context, "feeling", None),
         "confidence": getattr(context, "confidence", None),
         "example_prompt_text": getattr(context, "example_prompt_text", None),
+        "student_goal_context": getattr(context, "student_goal_context", None),
+        "student_confidence_context": getattr(context, "student_confidence_context", None),
+        "teacher_initial_impression": getattr(context, "teacher_initial_impression", None),
+        "student_struggle_context": getattr(context, "student_struggle_context", None),
+        "english_comfort_level": getattr(context, "english_comfort_level", None),
         "modelling_output_content": None,
         "teaching_output_content": None,
         "task_suggestion_llm_output": None,
@@ -386,9 +363,15 @@ async def process_interaction_streaming_route(request_data: InteractionRequest):
         "current_node_name": None,
     }
     
+    # Prepare config for LangGraph invocation
+    config = {
+        "configurable": {"thread_id": session_id},
+        "recursion_limit": 50,
+    }
+    
     # Call the *same* reusable SSE function.
     return StreamingResponse(
-        stream_graph_responses_sse(initial_graph_state), 
+        stream_graph_responses_sse(initial_graph_state, config=config), 
         media_type="text/event-stream"
     )
 
@@ -399,8 +382,8 @@ async def invoke_task_route(request_data: InvokeTaskRequest):
     """
     logger.info(f"Received non-streaming task '{request_data.task_name}'.")
     try:
-        initial_state = create_initial_state(request_data)
-        config = {"configurable": {"thread_id": initial_state["session_id"]}}
+        initial_state = await create_initial_state(request_data)
+        config = {"configurable": {"thread_id": initial_state["session_id"]}, "recursion_limit": 50}
         
         # Use ainvoke for a single, final result.
         final_state = await toefl_tutor_graph.ainvoke(initial_state, config=config)
@@ -514,7 +497,8 @@ async def process_interaction_route(request_data: InteractionRequest):
             "configurable": {
                 "thread_id": session_id,
                 "user_id": user_id
-            }
+            },
+            "recursion_limit": 50
         }
         
         # Use regular ainvoke for non-streaming response
@@ -620,7 +604,8 @@ async def process_interaction_non_streaming_route(request_data: InteractionReque
             "configurable": {
                 "thread_id": request_data.session_id, # Using session_id as thread_id
                 "user_id": request_data.current_context.user_id # Optional: if user_id is also useful in config
-            }
+            },
+            "recursion_limit": 50
         }
         logger.info(f"Non-streaming endpoint: Invoking graph for session {request_data.session_id}, user {request_data.current_context.user_id}")
 
