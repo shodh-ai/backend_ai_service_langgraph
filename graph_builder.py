@@ -2,8 +2,20 @@
 
 import logging
 from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from state import AgentGraphState
-from memory import Mem0Checkpointer
+from agents import save_interaction_node
+from agents.acknowledge_interrupt_node import acknowledge_interrupt_node
+from agents.conversation_handler import conversation_handler_node
+from agents.context_merger_node import context_merger_node
+
+# Commenting out the unused import
+# from memory import Mem0Checkpointer
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+
+logger = logging.getLogger(__name__)
 
 # --- 1. Import all your flows AND simple nodes ---
 from graph.modeling_flow import create_modeling_subgraph
@@ -14,13 +26,8 @@ from graph.cowriting_flow import create_cowriting_subgraph
 from graph.welcome_flow import create_welcome_subgraph
 from graph.pedagogy_flow import create_pedagogy_subgraph
 
-from agents import save_interaction_node
-from agents.acknowledge_interrupt_node import acknowledge_interrupt_node
-from agents.conversation_handler import conversation_handler_node
-
-logger = logging.getLogger(__name__)
-
 # --- 2. Define ALL node names ---
+NODE_CONTEXT_MERGER = "context_merger"
 NODE_MODELING_MODULE = "modeling_module"
 NODE_TEACHING_MODULE = "teaching_module"
 NODE_SCAFFOLDING_MODULE = "scaffolding_module"
@@ -87,7 +94,9 @@ async def initial_router_logic(state: AgentGraphState) -> str:
     logger.info(f"INITIAL ROUTER: Final decision. Routing to -> [{route_destination}]")
     return route_destination
 
-def build_graph():
+def build_graph(memory: AsyncSqliteSaver):
+    """Builds the main application graph."""
+    
     logger.info("--- Building Main TOEFL Tutor Graph ---")
     workflow = StateGraph(AgentGraphState)
 
@@ -101,13 +110,17 @@ def build_graph():
     workflow.add_node(NODE_PEDAGOGY_MODULE, create_pedagogy_subgraph())
 
     # Add the simple nodes
+    workflow.add_node(NODE_CONTEXT_MERGER, context_merger_node)
     workflow.add_node(NODE_ROUTER_ENTRY, router_entry_node)
     workflow.add_node(NODE_CONVERSATION_HANDLER, conversation_handler_node)
     workflow.add_node(NODE_SAVE_INTERACTION, save_interaction_node)
     workflow.add_node(NODE_ACKNOWLEDGE_INTERRUPT, acknowledge_interrupt_node)
 
     # --- 4. Define the Graph's Flow ---
-    workflow.set_entry_point(NODE_ROUTER_ENTRY)
+    workflow.set_entry_point(NODE_CONTEXT_MERGER)
+
+    # The merger node unconditionally proceeds to the main router
+    workflow.add_edge(NODE_CONTEXT_MERGER, NODE_ROUTER_ENTRY)
 
     workflow.add_conditional_edges(
         NODE_ROUTER_ENTRY,
@@ -139,8 +152,9 @@ def build_graph():
     # --- Compile the Final Graph ---
     logger.info("--- Main Graph Compilation ---")
 
-    checkpointer = Mem0Checkpointer()
-    compiled_graph = workflow.compile(checkpointer=checkpointer)
+    # Compile the graph with the checkpointer
+    # All nodes will eventually lead to the save_interaction_node, which is the end of a turn.
+    compiled_graph = workflow.compile(checkpointer=memory)
 
     logger.info("--- Main Graph Compiled Successfully ---")
     

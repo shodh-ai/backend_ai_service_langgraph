@@ -6,7 +6,7 @@ pydantic
 python-multipart
 deepgram-sdk==3.3.2
 langchain
-langgraph>=0.0.50
+langgraph
 langsmith
 google-generativeai>=0.3.0
 google-cloud-aiplatform
@@ -17,4 +17,4 @@ pytest-asyncio
 langchain-community
 chromadb
 sentence-transformers
-
+langgraph-checkpoint-sqlite

@@ -18,6 +18,11 @@ async def teaching_qa_handler_node(state: AgentGraphState) -> dict:
     Handles a student's question asked during a lesson, providing a contextual answer.
     """
     logger.info("--- Executing Teaching Q&A Handler Node ---")
+    # --- Debugging: Log incoming state ---
+    plan_on_entry = state.get("pedagogical_plan")
+    logger.info(f"QA_HANDLER_ENTRY_DEBUG: Plan on entry: {plan_on_entry}")
+    logger.info(f"QA_HANDLER_ENTRY_DEBUG: Type of plan on entry: {type(plan_on_entry)}")
+    # --- End Debugging ---
     try:
         student_question = state.get("transcript")
         # The lesson context is already loaded in the state from the start of the turn
@@ -79,10 +84,10 @@ async def teaching_qa_handler_node(state: AgentGraphState) -> dict:
 
         logger.info(f"Generated Q&A response: {output_data}")
         
-        # 4. Return the output. We do NOT advance the plan index here.
+        # 4. Return the output using the correct key for the teaching payload.
+        #    This ensures the state is updated correctly without overwriting other values.
         return {
-            "output_content": output_data,
-            "last_action_was": "TEACHING_QA" # Flag for the router
+            "intermediate_teaching_payload": output_data
         }
 
     except Exception as e:

@@ -28,7 +28,16 @@ async def check_plan_completion_node(state: AgentGraphState) -> dict:
     return {}
 
 async def entry_router(state: AgentGraphState) -> str:
-    """Routes to RAG for planning if no plan exists, otherwise starts delivery loop."""
+    """Routes based on the task and plan existence."""
+    task_name = state.get("task_name")
+    logger.info(f"Teaching Subgraph: Routing for task '{task_name}'.")
+
+    # If the task is a follow-up Q&A, go directly to the handler
+    if task_name == "TEACHING_PAGE_QA":
+        logger.info("Teaching Subgraph: QA task. Routing to QA handler.")
+        return NODE_TEACHING_QA
+
+    # For initial tasks, check if a plan already exists
     if state.get("pedagogical_plan"):
         logger.info("Teaching Subgraph: Active plan found. Routing to check completion.")
         return NODE_CHECK_PLAN_COMPLETION
@@ -90,12 +99,13 @@ def create_teaching_subgraph():
 
     # --- Define Flow ---
 
-    # 1. Entry Point: Plan or Deliver?
+    # 1. Entry Point: Plan, QA, or Deliver?
     workflow.set_conditional_entry_point(
         entry_router,
         {
             NODE_TEACHING_RAG: NODE_TEACHING_RAG,
-            NODE_CHECK_PLAN_COMPLETION: NODE_CHECK_PLAN_COMPLETION
+            NODE_CHECK_PLAN_COMPLETION: NODE_CHECK_PLAN_COMPLETION,
+            NODE_TEACHING_QA: NODE_TEACHING_QA # New entry for follow-up
         }
     )
 
@@ -122,17 +132,13 @@ def create_teaching_subgraph():
         }
     )
 
-    # 5. Delivery Content Generation and Interaction
-    workflow.add_edge(NODE_TEACHING_DELIVERY_GENERATOR, NODE_TEACHING_QA)
+    # 5. Delivery Content Generation -> ENDS the flow for this turn.
+    workflow.add_edge(NODE_TEACHING_DELIVERY_GENERATOR, END)
 
-    workflow.add_conditional_edges(
-        NODE_TEACHING_QA,
-        after_interaction_router,
-        {
-            NODE_TEACHING_PLAN_ADVANCER: NODE_TEACHING_PLAN_ADVANCER,
-            NODE_TEACHING_RAG: NODE_TEACHING_RAG, # Re-run RAG if confused
-        }
-    )
+    # 6. Interaction Handling (from a new entry point)
+    # The QA handler should be a terminal node for the turn. It answers the question,
+    # and then the graph should wait for the next user input.
+    workflow.add_edge(NODE_TEACHING_QA, END)
 
     workflow.add_edge(NODE_TEACHING_PLAN_ADVANCER, NODE_CHECK_PLAN_COMPLETION)
 

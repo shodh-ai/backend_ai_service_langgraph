@@ -107,10 +107,19 @@ def unify_and_standardize_cta_data():
                 original_row_dict = row.to_dict()
                 metadata = {k.strip(): str(v) for k, v in original_row_dict.items()}
                 
+                # Default category is the filename's base category
                 metadata['category'] = category
 
-                if 'LESSON_ID' in df.columns:
-                    metadata['lesson_id'] = str(row.get('LESSON_ID', ''))
+                # For 'teaching' files, overwrite the category with the specific learning objective ID
+                if category == 'teaching':
+                    learning_objective_full = str(row.get('LEARNING_OBJECTIVE', '')).strip()
+                    if learning_objective_full:
+                        # Extract the ID part (e.g., "SPK_GEN_FLU_001") before the colon
+                        lesson_id = learning_objective_full.split(':')[0].strip()
+                        if lesson_id:
+                            metadata['category'] = lesson_id
+                            # Also add lesson_id as a separate field for clarity
+                            metadata['lesson_id'] = lesson_id
                 
                 standardized_record = {
                     "document_for_embedding": embedding_doc,

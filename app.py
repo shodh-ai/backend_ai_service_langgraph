@@ -11,7 +11,7 @@ else:
 
 import logging
 # Configure basic logging early, this might be reconfigured by uvicorn but good for initial script execution
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', force=True)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', force=True)
 logger = logging.getLogger("uvicorn.error") # Ensure logger is defined before use in endpoints
 
 from fastapi import FastAPI, HTTPException, Request
@@ -48,18 +48,29 @@ from models import (
     InteractionRequestContext,
     ReactUIAction,
 )
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+toefl_tutor_graph: Optional[Any] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Handles application startup and shutdown events.
-    Initializes the global memory instance.
+    Initializes the global memory instance and the graph with its checkpointer.
     """
-    logger.info("--- Application startup: Initializing memory ---")
+    global toefl_tutor_graph
+    logger.info("--- Application startup: Initializing memory and graph ---")
+    
     initialize_memory()
-    logger.info("--- Application startup: Memory initialized ---")
-    yield
-    logger.info("--- Application shutdown ---")
+    logger.info("--- Application startup: StudentProfileMemory initialized ---")
+
+    async with AsyncSqliteSaver.from_conn_string("checkpoints.sqlite") as checkpointer:
+        toefl_tutor_graph = build_graph(checkpointer)
+        logger.info("--- Application startup: Main graph compiled with SQLite checkpointer ---")
+        
+        yield
+    
+    logger.info("--- Application shutdown: Resources cleaned up ---")
 
 
 app = FastAPI(
@@ -78,8 +89,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize the graph when the application starts
-toefl_tutor_graph = build_graph()
+# The graph is now initialized within the lifespan manager
+# toefl_tutor_graph = build_graph()
 
 # --- Deepgram Transcription Proxy Endpoint ---
 @app.post("/transcribe_audio")
@@ -145,13 +156,13 @@ async def create_initial_state(request_data: InvokeTaskRequest) -> AgentGraphSta
     session_id = payload.get("session_id", str(uuid.uuid4()))
 
     # 3. Current turn context (can be empty or partial)
-    current_context = payload.get("current_context", {})
+    incoming_context = payload.get("current_context", {})
     # Ensure at minimum the user_id is present for downstream logic
-    current_context.setdefault("user_id", user_id)
+    incoming_context.setdefault("user_id", user_id)
 
     # 4. Determine task_name for routing. Prefer the explicit `task_name` from the request object,
-    #    but fall back to any task_stage present in the current_context.
-    task_name = request_data.task_name or current_context.get("task_stage")
+    #    but fall back to any task_stage present in the incoming_context.
+    task_name = request_data.task_name or incoming_context.get("task_stage")
 
     logger.info(f"[create_initial_state] Building turn state for task: '{task_name}' | session_id: '{session_id}'")
 
@@ -165,10 +176,11 @@ async def create_initial_state(request_data: InvokeTaskRequest) -> AgentGraphSta
         # Turn-specific inputs
         "transcript": payload.get("transcript"),
         "chat_history": payload.get("chat_history", []),
-        "current_context": current_context,
+        "incoming_context": incoming_context, # Use the new dedicated key
 
         # Place-holders / defaults for the remainder of the AgentGraphState keys.
         # They will either be set by nodes or restored by the checkpointer merge.
+        "current_context": {}, # Will be populated from checkpoint
         "rag_document_data": [],
         "intermediate_modelling_payload": None,
         "intermediate_teaching_payload": None,

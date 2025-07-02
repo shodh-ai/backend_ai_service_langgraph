@@ -17,6 +17,7 @@ AgentGraphState = TypedDict('AgentGraphState', {
     'session_id': str,
     'task_name': str,
     'current_context': Dict[str, Any],
+    'incoming_context': Optional[Dict[str, Any]], # NEW: For intelligent context merging
     'chat_history': List[Dict[str, Any]],
     'user_token': str,
     'rag_query_config': Optional[Dict[str, Any]],

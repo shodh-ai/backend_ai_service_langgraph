@@ -1,5 +1,6 @@
 import logging
 import pickle
+import base64
 import threading
 import json
 from datetime import datetime, timezone
@@ -7,7 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
 from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.base import Checkpoint as BaseCheckpointer
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from .mem0_client import shared_mem0_client
 
 logger = logging.getLogger(__name__)
@@ -102,16 +103,16 @@ class StudentProfileMemory:
             self.mem0_client.delete_all(user_id=user_id)
             logger.info(f"StudentProfileMemory: Cleared all data for user_id: {user_id}")
         except Exception as e:
-            logger.error(f"StudentProfileMemory: Error clearing data for {user_id}: {e}")
+            logger.error(f"StudentProfileMemory: Error clearing memory for {user_id}: {e}", exc_info=True)
             raise
 
-class Mem0Checkpointer(BaseCheckpointer):
-    """
-    A LangGraph checkpointer that stores the entire graph state in Mem0.
-    """
+class Mem0Checkpointer(BaseCheckpointSaver):
+    """A LangGraph checkpointer that stores the entire graph state in Mem0."""
+
     def __init__(self, **kwargs):
+        mem0_client = kwargs.pop("mem0_client", shared_mem0_client)
         super().__init__(serde=pickle, **kwargs)
-        self.mem0_client = shared_mem0_client
+        self.mem0_client = mem0_client
         self.user_id_field = 'user_id'
 
     def get(self, config: RunnableConfig) -> Optional[Dict[str, Any]]:
@@ -136,7 +137,9 @@ class Mem0Checkpointer(BaseCheckpointer):
             return None
 
         try:
-            return self.serde.loads(target_memory.get('text').encode('latin-1'))
+            # Decode from base64 and then unpickle
+            decoded_bytes = base64.b64decode(target_memory.get('text').encode('utf-8'))
+            return self.serde.loads(decoded_bytes)
         except Exception as e:
             logger.error(f"Error deserializing checkpoint: {e}")
             return None
@@ -149,9 +152,13 @@ class Mem0Checkpointer(BaseCheckpointer):
         version = self.get_next_version(None)
         
         try:
+            # Pickle the checkpoint and then encode it in base64
+            pickled_checkpoint = self.serde.dumps(checkpoint)
+            base64_encoded_checkpoint = base64.b64encode(pickled_checkpoint).decode('utf-8')
+
             # Save to mem0
             created_memory = self.mem0_client.add(
-                messages=[{"role": "system", "content": self.serde.dumps(checkpoint).decode('latin-1')}],
+                messages=[{"role": "system", "content": base64_encoded_checkpoint}],
                 user_id=thread_id,
                 metadata={
                     "type": "langgraph_checkpoint",
@@ -208,6 +215,3 @@ class Mem0Checkpointer(BaseCheckpointer):
     async def alist(self, config: RunnableConfig) -> List[RunnableConfig]:
         """Async version of list."""
         return self.list(config)
-
-
-
