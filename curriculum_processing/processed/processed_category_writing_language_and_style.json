@@ -1,0 +1,16 @@
+{
+    "WRT_GEN_STR_001": {
+        "title": "The student will understand and be able to construct simple, compound, and complex sentences, recognizing their basic structures and using them to add variety to their writing.",
+        "prerequisites": []
+    },
+    "WRT_GEN_STY_001": {
+        "title": "The student will be able to identify and replace informal language with formal alternatives in simple sentences.",
+        "prerequisites": []
+    },
+    "Creating smooth transitions between sentences.: Introduction - Thesis Statement": {
+        "title": "Creating smooth transitions between sentences.: Introduction - Thesis Statement",
+        "prerequisites": [
+            "WRT_GEN_STR_001"
+        ]
+    }
+}

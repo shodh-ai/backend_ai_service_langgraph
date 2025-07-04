@@ -1,0 +1,28 @@
+{
+    "S_CF_Transitions": {
+        "title": "Use transitions (e.g., however, furthermore, in addition) to connect ideas smoothly.",
+        "prerequisites": []
+    },
+    "S_CF_Referencing": {
+        "title": "Use referencing (e.g., pronouns, synonyms) to maintain clarity and avoid repetition.",
+        "prerequisites": []
+    },
+    "S_CF_LogicalConnectors": {
+        "title": "Use logical connectors (e.g., because, therefore, although) to show relationships between ideas.",
+        "prerequisites": []
+    },
+    "S_CF_CohesiveDevices": {
+        "title": "Combine transitions, referencing, and logical connectors to create cohesive and coherent speech.",
+        "prerequisites": [
+            "S_CF_Transitions",
+            "S_CF_Referencing",
+            "S_CF_LogicalConnectors"
+        ]
+    },
+    "S_CF_NaturalFlow": {
+        "title": "Maintain a natural flow of speech with appropriate pacing, intonation, and pausing.",
+        "prerequisites": [
+            "S_CF_CohesiveDevices"
+        ]
+    }
+}

@@ -11,6 +11,7 @@ from agents.teaching_delivery_node import teaching_delivery_generator_node
 from agents.teaching_plan_advancer_node import teaching_plan_advancer_node
 from agents.teaching_qa_handler_node import teaching_qa_handler_node
 from agents.teaching_RAG_document_node import teaching_RAG_document_node
+from agents.teaching_output_formatter import teaching_output_formatter_node
 
 # --- Node Names ---
 NODE_TEACHING_RAG = "teaching_rag_document"
@@ -19,6 +20,7 @@ NODE_TEACHING_DELIVERY_GENERATOR = "teaching_delivery_generator"
 NODE_TEACHING_QA = "teaching_qa"
 NODE_TEACHING_PLAN_ADVANCER = "teaching_plan_advancer"
 NODE_CHECK_PLAN_COMPLETION = "check_plan_completion" # New placeholder node
+NODE_TEACHING_OUTPUT_FORMATTER = "teaching_output_formatter"
 
 # --- Placeholder & Router Functions ---
 
@@ -29,11 +31,11 @@ async def check_plan_completion_node(state: AgentGraphState) -> dict:
 
 async def entry_router(state: AgentGraphState) -> str:
     """Routes based on the task and plan existence."""
-    task_name = state.get("task_name")
-    logger.info(f"Teaching Subgraph: Routing for task '{task_name}'.")
+    task_stage = state.get("current_context", {}).get("task_stage")
+    logger.info(f"Teaching Subgraph: Routing for task '{task_stage}'.")
 
     # If the task is a follow-up Q&A, go directly to the handler
-    if task_name == "TEACHING_PAGE_QA":
+    if task_stage == "TEACHING_PAGE_QA":
         logger.info("Teaching Subgraph: QA task. Routing to QA handler.")
         return NODE_TEACHING_QA
 
@@ -93,6 +95,7 @@ def create_teaching_subgraph():
     workflow.add_node(NODE_TEACHING_PLANNER, teaching_planner_node)
     workflow.add_node(NODE_TEACHING_RAG, teaching_RAG_document_node)
     workflow.add_node(NODE_TEACHING_DELIVERY_GENERATOR, teaching_delivery_generator_node)
+    workflow.add_node(NODE_TEACHING_OUTPUT_FORMATTER, teaching_output_formatter_node)
     workflow.add_node(NODE_TEACHING_QA, teaching_qa_handler_node)
     workflow.add_node(NODE_TEACHING_PLAN_ADVANCER, teaching_plan_advancer_node)
     workflow.add_node(NODE_CHECK_PLAN_COMPLETION, check_plan_completion_node)
@@ -132,8 +135,9 @@ def create_teaching_subgraph():
         }
     )
 
-    # 5. Delivery Content Generation -> ENDS the flow for this turn.
-    workflow.add_edge(NODE_TEACHING_DELIVERY_GENERATOR, END)
+    # 5. Delivery Content Generation -> Format then END the flow for this turn.
+    workflow.add_edge(NODE_TEACHING_DELIVERY_GENERATOR, NODE_TEACHING_OUTPUT_FORMATTER)
+    workflow.add_edge(NODE_TEACHING_OUTPUT_FORMATTER, END)
 
     # 6. Interaction Handling (from a new entry point)
     # The QA handler should be a terminal node for the turn. It answers the question,

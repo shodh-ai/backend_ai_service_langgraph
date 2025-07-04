@@ -86,6 +86,15 @@ AgentGraphState = TypedDict('AgentGraphState', {
     'Initial Impression': Optional[str],
     'Speaking Strengths': Optional[str],
     
+    # --- Hierarchical Planning State ---
+    'student_memory_context': Optional[Dict[str, Any]], # The student's profile and history from Mem0
+    'current_lo_to_address': Optional[Dict[str, Any]], # The LO chosen by the macro planner
+    'pedagogical_plan': Optional[List[Dict[str, Any]]], # The detailed lesson plan from the meso planner
+    'current_plan_step_index': Optional[int], # The index of the current step in the pedagogical_plan
+    'last_ai_action': Optional[str], # A flag to track the AI's last move for routing
+    'last_action_was': Optional[str], # A flag to specify the last action for saving interactions
+    'student_intent_for_rox_turn': Optional[str], # The student's classified intent for the turn
+
     # === Error Handling ===
     'error_message': Optional[str],
     'route_to_error_handler': bool

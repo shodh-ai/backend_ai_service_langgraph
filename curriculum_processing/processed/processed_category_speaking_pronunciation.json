@@ -1,0 +1,12 @@
+{
+    "SPK_GEN_PRO_001": {
+        "title": "The student will be able to differentiate between and accurately pronounce a small set of common English vowel and consonant sounds that are frequently mispronounced by speakers of their native language (assuming a generic 'Beginner' student).",
+        "prerequisites": []
+    },
+    "SPK_GEN_PRO_002": {
+        "title": "The student will be able to identify and apply correct word stress in two-syllable nouns and verbs, and understand how sentence stress highlights important information.",
+        "prerequisites": [
+            "SPK_GEN_PRO_001"
+        ]
+    }
+}

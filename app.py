@@ -151,8 +151,10 @@ async def create_initial_state(request_data: InvokeTaskRequest) -> AgentGraphSta
         logger.error("Failed to decode json_payload. Using empty payload.")
         payload = {}
 
-    # 2. Core identifiers
-    user_id = payload.get("user_id", "unknown_user")
+    # 2. Core identifiers - THE FIX
+    # The user_id is nested inside the context object in the payload.
+    incoming_context = payload.get("current_context", {})
+    user_id = incoming_context.get("user_id", "unknown_user") # Correctly extract from context
     session_id = payload.get("session_id", str(uuid.uuid4()))
 
     # 3. Current turn context (can be empty or partial)
@@ -268,7 +270,7 @@ async def stream_graph_responses_sse(initial_graph_state: AgentGraphState, confi
                 # --- THIS IS THE FIX ---
                 # We package everything into ONE event.
                 final_response_payload = {
-                    "final_text_for_tts": output_data.get("final_text_for_tts"),
+                    "text_for_tts": output_data.get("text_for_tts"),
                     "final_ui_actions": output_data.get("final_ui_actions", [])
                 }
 

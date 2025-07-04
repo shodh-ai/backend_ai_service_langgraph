@@ -17,11 +17,25 @@ async def conversation_handler_node(state: AgentGraphState) -> dict:
             logger.warning("ConversationHandlerNode: Transcript is empty. Nothing to process.")
             return {"classified_intent": "NO_INPUT"}
 
-        # Check for the contextual micro-intent from the listen step
-        interruption_context = state.get("interruption_context", {})
-        expected_intent = interruption_context.get("expected_intent")
+        # Check for the last AI action to provide conversational context
+        last_ai_action = state.get("last_ai_action")
 
-        if expected_intent:
+        if last_ai_action == "PROPOSED_NEW_LO":
+            # This is the specific context for handling the LO proposal
+            lo_title = state.get("current_lo_to_address", {}).get("title", "the proposed topic")
+            llm_prompt = f"""
+As an NLU engine, your task is to classify the user's intent.
+The AI just proposed working on "{lo_title}".
+The user responded: "{transcript}"
+
+Is the student's intent 'CONFIRM_PROCEED_WITH_LO' or 'REJECT_OR_QUESTION_LO'?
+- 'CONFIRM_PROCEED_WITH_LO' means they agree, say yes, okay, etc.
+- 'REJECT_OR_QUESTION_LO' means they say no, ask a question, or want to do something else.
+
+Respond with a SINGLE JSON object with one key, "intent", and the classified intent as the value.
+Example: {{"intent": "CONFIRM_PROCEED_WITH_LO"}}
+"""
+        elif state.get("interruption_context", {}).get("expected_intent"):
             # Focused prompt using the micro-intent
             llm_prompt = f"""
 As an NLU engine, your task is to classify the user's intent.

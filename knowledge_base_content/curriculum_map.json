@@ -1,0 +1,242 @@
+{
+    "Creating smooth transitions between sentences.: Introduction - Thesis Statement": {
+        "category": "Writing Language And Style",
+        "prerequisites": [
+            "WRT_GEN_STR_001"
+        ],
+        "title": "Creating smooth transitions between sentences.: Introduction - Thesis Statement"
+    },
+    "Ensuring subject-verb agreement.: Introduction - Thesis Statement": {
+        "category": "Core Grammar",
+        "prerequisites": [
+            "GRM_SS_CORE_001"
+        ],
+        "title": "Ensuring subject-verb agreement.: Introduction - Thesis Statement"
+    },
+    "GRM_SS_CORE_001": {
+        "category": "Core Grammar",
+        "prerequisites": [],
+        "title": "The student will be able to identify and correctly use subjects, verbs, and objects to construct simple, grammatically correct sentences."
+    },
+    "GRM_VT_TENSE_001": {
+        "category": "Core Grammar",
+        "prerequisites": [
+            "GRM_SS_CORE_001"
+        ],
+        "title": "The student will be able to identify and correctly use the simple, progressive, and perfect tenses (present, past, future) in basic sentences to clearly express when an action happens."
+    },
+    "LIS_GEN_CORE_001": {
+        "category": "Listening Core Skills",
+        "prerequisites": [],
+        "title": "The student can identify the topic and speaker's purpose in a short, simple conversation."
+    },
+    "LIS_NOTE_STRAT_001": {
+        "category": "Listening Strategy",
+        "prerequisites": [],
+        "title": "The student will understand and be able to apply a basic, consistent system for taking notes using abbreviations and symbols to capture key information efficiently."
+    },
+    "RD_GEN_STRAT_001": {
+        "category": "Reading Strategy",
+        "prerequisites": [],
+        "title": "The student can identify the main topic and overall structure of a short passage by focusing on the first and last sentences of each paragraph and the title."
+    },
+    "RD_QT_FACT_001": {
+        "category": "Reading Core Skills",
+        "prerequisites": [],
+        "title": "The student will be able to accurately identify and extract explicitly stated information from a short text to answer direct factual questions."
+    },
+    "S1_Conclusion": {
+        "category": "Speaking Task 1 Structure",
+        "prerequisites": [
+            "S1_Transition_Words",
+            "S1_Details_Examples",
+            "S1_Two_Reasons"
+        ],
+        "title": "Summarizing Your Preference and Key Points in a Brief Conclusion for Speaking Task 1"
+    },
+    "S1_Details_Examples": {
+        "category": "Speaking Task 1 Structure",
+        "prerequisites": [
+            "S1_Two_Reasons"
+        ],
+        "title": "Providing Specific Details and Examples to Support Each Reason in Speaking Task 1"
+    },
+    "S1_Introduction": {
+        "category": "Speaking Task 1 Structure",
+        "prerequisites": [
+            "S1_Overall_Structure"
+        ],
+        "title": "Crafting a Concise and Effective Introduction for Speaking Task 1"
+    },
+    "S1_Overall_Structure": {
+        "category": "Speaking Task 1 Structure",
+        "prerequisites": [],
+        "title": "Understanding the Overall Structure of Speaking Task 1 (Personal Preference)"
+    },
+    "S1_Time_Management": {
+        "category": "Speaking Task 1 Structure",
+        "prerequisites": [
+            "S1_Overall_Structure",
+            "S1_Introduction",
+            "S1_Two_Reasons",
+            "S1_Details_Examples",
+            "S1_Transition_Words",
+            "S1_Conclusion"
+        ],
+        "title": "Managing Time Effectively to Address All Components within the 45-second Time Limit for Speaking Task 1"
+    },
+    "S1_Transition_Words": {
+        "category": "Speaking Task 1 Structure",
+        "prerequisites": [
+            "S1_Introduction",
+            "S1_Two_Reasons",
+            "S1_Details_Examples"
+        ],
+        "title": "Using Transition Words to Connect Ideas Smoothly within Speaking Task 1"
+    },
+    "S1_Two_Reasons": {
+        "category": "Speaking Task 1 Structure",
+        "prerequisites": [
+            "S1_Overall_Structure",
+            "S1_Introduction"
+        ],
+        "title": "Clearly Stating Two Distinct Reasons to Support Your Preference in Speaking Task 1"
+    },
+    "SPK_GEN_FLU_001": {
+        "category": "Speaking Fluency",
+        "prerequisites": [],
+        "title": "The student will understand and apply the 'Chunking' technique to break down sentences into manageable units, reducing pauses and improving fluency."
+    },
+    "SPK_GEN_LANG_001": {
+        "category": "Core Grammar",
+        "prerequisites": [
+            "GRM_SS_CORE_001",
+            "GRM_VT_TENSE_001"
+        ],
+        "title": "The student will be able to construct grammatically correct simple and compound sentences, understanding the role of conjunctions in connecting independent clauses."
+    },
+    "SPK_GEN_PRO_001": {
+        "category": "Speaking Pronunciation",
+        "prerequisites": [],
+        "title": "The student will be able to differentiate between and accurately pronounce a small set of common English vowel and consonant sounds that are frequently mispronounced by speakers of their native language (assuming a generic 'Beginner' student)."
+    },
+    "SPK_GEN_PRO_002": {
+        "category": "Speaking Pronunciation",
+        "prerequisites": [
+            "SPK_GEN_PRO_001"
+        ],
+        "title": "The student will be able to identify and apply correct word stress in two-syllable nouns and verbs, and understand how sentence stress highlights important information."
+    },
+    "SPK_T1_CONT_001": {
+        "category": "Speaking Task 1 Content",
+        "prerequisites": [],
+        "title": "The student will be able to construct a simple sentence that clearly states their opinion or preference using a basic sentence template."
+    },
+    "SPK_T1_ORG_001": {
+        "category": "General Structure And Organization",
+        "prerequisites": [],
+        "title": "The student will understand and be able to apply the basic three-part structure (Introduction, Body, Conclusion) to simple written or spoken responses."
+    },
+    "SPK_T1_STRAT_001": {
+        "category": "Speaking Task 1 Strategy",
+        "prerequisites": [],
+        "title": "The student will be able to consistently generate two clear, distinct, and relevant reasons to support their chosen preference in Speaking Task 1 within the 15-second preparation time."
+    },
+    "SPK_T2_CONT_001": {
+        "category": "Integrated Speaking Skills",
+        "prerequisites": [],
+        "title": "The student can identify the 'before' and 'after' states described in a reading passage and articulate the difference between them in a simple sentence."
+    },
+    "SPK_T2_STRAT_001": {
+        "category": "Integrated Speaking Skills",
+        "prerequisites": [
+            "SPK_T2_CONT_001"
+        ],
+        "title": "The student can accurately identify the main proposed change and the two supporting reasons presented in a simple campus announcement."
+    },
+    "S_CF_CohesiveDevices": {
+        "category": "Speaking Cohesion And Flow",
+        "prerequisites": [
+            "S_CF_Transitions",
+            "S_CF_Referencing",
+            "S_CF_LogicalConnectors"
+        ],
+        "title": "Combine transitions, referencing, and logical connectors to create cohesive and coherent speech."
+    },
+    "S_CF_LogicalConnectors": {
+        "category": "Speaking Cohesion And Flow",
+        "prerequisites": [],
+        "title": "Use logical connectors (e.g., because, therefore, although) to show relationships between ideas."
+    },
+    "S_CF_NaturalFlow": {
+        "category": "Speaking Cohesion And Flow",
+        "prerequisites": [
+            "S_CF_CohesiveDevices"
+        ],
+        "title": "Maintain a natural flow of speech with appropriate pacing, intonation, and pausing."
+    },
+    "S_CF_Referencing": {
+        "category": "Speaking Cohesion And Flow",
+        "prerequisites": [],
+        "title": "Use referencing (e.g., pronouns, synonyms) to maintain clarity and avoid repetition."
+    },
+    "S_CF_Transitions": {
+        "category": "Speaking Cohesion And Flow",
+        "prerequisites": [],
+        "title": "Use transitions (e.g., however, furthermore, in addition) to connect ideas smoothly."
+    },
+    "TTS_ALL_TIME_001": {
+        "category": "General Test Strategies",
+        "prerequisites": [],
+        "title": "The student will understand the importance of time management on the TOEFL and be able to create a basic time allocation plan for each section."
+    },
+    "Using varied and precise academic vocabulary.: Introduction - Thesis Statement": {
+        "category": "Academic Vocabulary",
+        "prerequisites": [
+            "VOC_ACAD_AWL_001"
+        ],
+        "title": "Using varied and precise academic vocabulary.: Introduction - Thesis Statement"
+    },
+    "VOC_ACAD_AWL_001": {
+        "category": "Academic Vocabulary",
+        "prerequisites": [],
+        "title": "The student will be able to identify and understand the basic meaning of 5-10 high-frequency words from the Academic Word List (AWL) in simple sentences and short paragraphs."
+    },
+    "VOC_STRAT_CONT_001": {
+        "category": "Vocabulary Strategy",
+        "prerequisites": [],
+        "title": "The student will be able to identify and use different types of context clues (definition, example, synonym, antonym) to understand the meaning of unfamiliar words in simple sentences."
+    },
+    "WRT_GEN_STR_001": {
+        "category": "Writing Language And Style",
+        "prerequisites": [],
+        "title": "The student will understand and be able to construct simple, compound, and complex sentences, recognizing their basic structures and using them to add variety to their writing."
+    },
+    "WRT_GEN_STY_001": {
+        "category": "Writing Language And Style",
+        "prerequisites": [],
+        "title": "The student will be able to identify and replace informal language with formal alternatives in simple sentences."
+    },
+    "WRT_GEN_TYP_001": {
+        "category": "Writing Mechanics",
+        "prerequisites": [],
+        "title": "The student can identify and correct their most common typing errors and implement strategies to improve typing speed and accuracy, ultimately enabling them to compose a full essay within the TOEFL time limit."
+    },
+    "WRT_T1_CONT_001": {
+        "category": "Integrated Writing Skills",
+        "prerequisites": [
+            "WRT_T1_STRAT_001"
+        ],
+        "title": "The student can identify and clearly state the main topic and the central arguments of both the reading and the lecture in a concise introductory paragraph."
+    },
+    "WRT_T1_STRAT_001": {
+        "category": "Integrated Writing Skills",
+        "prerequisites": [],
+        "title": "The student will be able to identify the topic sentence (main argument) and supporting sentences (key supporting points) in a simple academic paragraph."
+    },
+    "W_Ind_Thesis": {
+        "category": "Independent Writing Structure",
+        "prerequisites": [],
+        "title": "Crafting a clear and arguable thesis statement.: Introduction - Thesis Statement"
+    }
+}

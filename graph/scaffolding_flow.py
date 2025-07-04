@@ -3,12 +3,9 @@ from langgraph.graph import StateGraph, END
 from state import AgentGraphState
 
 # 1. Import the agent node functions
-from agents import (
-    scaffolding_RAG_document_node,
-    scaffolding_generator_node,
-    scaffolding_output_formatter_node,
-
-)
+from agents.scaffolding_RAG_document_node import scaffolding_RAG_document_node
+from agents.scaffolding_generator import scaffolding_generator_node
+from agents.scaffolding_output_formatter import scaffolding_output_formatter_node
 
 # 2. Define standardized node names
 NODE_SCAFFOLDING_RAG = "scaffolding_rag"

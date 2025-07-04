@@ -1,0 +1,52 @@
+{
+    "S1_Overall_Structure": {
+        "title": "Understanding the Overall Structure of Speaking Task 1 (Personal Preference)",
+        "prerequisites": []
+    },
+    "S1_Introduction": {
+        "title": "Crafting a Concise and Effective Introduction for Speaking Task 1",
+        "prerequisites": [
+            "S1_Overall_Structure"
+        ]
+    },
+    "S1_Two_Reasons": {
+        "title": "Clearly Stating Two Distinct Reasons to Support Your Preference in Speaking Task 1",
+        "prerequisites": [
+            "S1_Overall_Structure",
+            "S1_Introduction"
+        ]
+    },
+    "S1_Details_Examples": {
+        "title": "Providing Specific Details and Examples to Support Each Reason in Speaking Task 1",
+        "prerequisites": [
+            "S1_Two_Reasons"
+        ]
+    },
+    "S1_Transition_Words": {
+        "title": "Using Transition Words to Connect Ideas Smoothly within Speaking Task 1",
+        "prerequisites": [
+            "S1_Introduction",
+            "S1_Two_Reasons",
+            "S1_Details_Examples"
+        ]
+    },
+    "S1_Conclusion": {
+        "title": "Summarizing Your Preference and Key Points in a Brief Conclusion for Speaking Task 1",
+        "prerequisites": [
+            "S1_Transition_Words",
+            "S1_Details_Examples",
+            "S1_Two_Reasons"
+        ]
+    },
+    "S1_Time_Management": {
+        "title": "Managing Time Effectively to Address All Components within the 45-second Time Limit for Speaking Task 1",
+        "prerequisites": [
+            "S1_Overall_Structure",
+            "S1_Introduction",
+            "S1_Two_Reasons",
+            "S1_Details_Examples",
+            "S1_Transition_Words",
+            "S1_Conclusion"
+        ]
+    }
+}

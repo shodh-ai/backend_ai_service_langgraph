@@ -1,0 +1,25 @@
+{
+    "SPK_GEN_LANG_001": {
+        "title": "The student will be able to construct grammatically correct simple and compound sentences, understanding the role of conjunctions in connecting independent clauses.",
+        "prerequisites": [
+            "GRM_SS_CORE_001",
+            "GRM_VT_TENSE_001"
+        ]
+    },
+    "GRM_SS_CORE_001": {
+        "title": "The student will be able to identify and correctly use subjects, verbs, and objects to construct simple, grammatically correct sentences.",
+        "prerequisites": []
+    },
+    "GRM_VT_TENSE_001": {
+        "title": "The student will be able to identify and correctly use the simple, progressive, and perfect tenses (present, past, future) in basic sentences to clearly express when an action happens.",
+        "prerequisites": [
+            "GRM_SS_CORE_001"
+        ]
+    },
+    "Ensuring subject-verb agreement.: Introduction - Thesis Statement": {
+        "title": "Ensuring subject-verb agreement.: Introduction - Thesis Statement",
+        "prerequisites": [
+            "GRM_SS_CORE_001"
+        ]
+    }
+}

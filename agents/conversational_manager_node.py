@@ -28,28 +28,26 @@ except yaml.YAMLError as e:
 async def handle_home_greeting_node(state: AgentGraphState) -> dict:
     """
     Generates a personalized welcome greeting using an LLM and returns it in the
-    standardized 'final_flow_output' format.
+    standardized 'final_text_for_tts' format.
     """
-    student_name = "Harshit" # Temporarily hardcoded for testing
+    student_name = "Harshit"  # Temporarily hardcoded for testing
     logger.info(f"ConversationalManagerNode: Using hardcoded student_name: '{student_name}' for testing LLM call.")
 
     greeting_prompt_config = PROMPTS.get('welcome_greeting')
     if not greeting_prompt_config:
         logger.error("Welcome greeting prompt configuration not found. Falling back to default.")
-        fallback_output = {
-            "text_for_tts": f"Hello {student_name}! Welcome.",
-            "ui_actions": []
+        return {
+            "final_text_for_tts": f"Hello {student_name}! Welcome.",
+            "final_ui_actions": []
         }
-        return {"final_flow_output": fallback_output}
 
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         logger.error("GOOGLE_API_KEY not found in environment. Falling back to default greeting.")
-        fallback_output = {
-            "text_for_tts": f"Hello {student_name}! Welcome.",
-            "ui_actions": []
+        return {
+            "final_text_for_tts": f"Hello {student_name}! Welcome.",
+            "final_ui_actions": []
         }
-        return {"final_flow_output": fallback_output}
 
     try:
         genai.configure(api_key=api_key)
@@ -58,45 +56,45 @@ async def handle_home_greeting_node(state: AgentGraphState) -> dict:
             generation_config=GenerationConfig(response_mime_type="application/json")
         )
 
-        persona_details = "Your friendly and encouraging AI guide, Rox."
-        system_prompt_text = greeting_prompt_config.get('system_prompt', '').format(
-            student_name=student_name,
-            persona_details=persona_details
-        )
+        system_prompt_text = greeting_prompt_config.get('system_prompt', '').format(student_name=student_name)
         user_prompt_text = greeting_prompt_config.get('user_prompt', '')
         full_prompt = f"{system_prompt_text}\n\n{user_prompt_text}"
-        
-        logger.info(f"Full prompt for greeting LLM: {full_prompt}")
-        
+
         raw_llm_response_text = ""
+        greeting_text = ""
+
         try:
             response = await model.generate_content_async(full_prompt)
             raw_llm_response_text = response.text
             logger.info(f"Raw LLM Response for greeting: {raw_llm_response_text}")
-        except Exception as gen_err:
-            logger.error(f"Error during model.generate_content_async(): {gen_err}", exc_info=True)
-            fallback_tts = f"Hello {student_name}! Welcome. (LLM Generation Error)"
-            logger.info(f"ConversationalManagerNode: Using fallback greeting due to generation error: {fallback_tts}")
-            error_output = {"text_for_tts": fallback_tts, "ui_actions": []}
-            return {"final_flow_output": error_output}
+            
+            llm_output_dict = json.loads(raw_llm_response_text)
+            greeting_text = llm_output_dict.get("tts")  # <<< FIX: Use 'tts' key
 
-        try:
-            llm_output_json = json.loads(raw_llm_response_text)
-            greeting_tts = llm_output_json.get("greeting_tts", f"Hello {student_name}! I'm Rox, welcome! (JSON Key Missing)")
+            if not greeting_text:
+                logger.error("LLM did not return the expected 'tts' key in the JSON object.")
+                greeting_text = f"Hello {student_name}! I'm ready to get started." # Fallback
+
         except json.JSONDecodeError as json_err:
             logger.error(f"JSONDecodeError parsing LLM greeting response. Error: {json_err}. Raw text: {raw_llm_response_text}")
-            greeting_tts = f"Hello {student_name}! I'm Rox. (JSON Parse Error)"
-        except Exception as parse_err:
-            logger.error(f"Unexpected error parsing LLM greeting response. Error: {parse_err}. Raw text: {raw_llm_response_text}")
-            greeting_tts = f"Hello {student_name}! I'm Rox. (Unexpected Parse Error)"
+            greeting_text = f"Hello {student_name}! (JSON Parse Error)"
+        except Exception as gen_err:
+            logger.error(f"Error during LLM call or parsing: {gen_err}", exc_info=True)
+            greeting_text = f"Hello {student_name}! (LLM Generation Error)"
 
-        logger.info(f"ConversationalManagerNode: LLM-generated greeting: {greeting_tts}")
-        final_output = {"text_for_tts": greeting_tts, "ui_actions": []}
-        return {"final_flow_output": final_output}
+        logger.info(f"ConversationalManagerNode: LLM-generated greeting: {greeting_text}")
+
+        # Standardized output format
+        return {
+            "final_text_for_tts": greeting_text,
+            "final_ui_actions": []
+        }
 
     except Exception as e:
         logger.error(f"Outer error in handle_home_greeting_node (e.g., config, model init): {e}", exc_info=True)
-        fallback_tts = f"Hello {student_name}! Welcome. (LLM Setup Error)"
+        fallback_tts = f"Hello {student_name}! (LLM Setup Error)"
         logger.info(f"ConversationalManagerNode: Using fallback greeting due to setup error: {fallback_tts}")
-        error_output = {"text_for_tts": fallback_tts, "ui_actions": []}
-        return {"final_flow_output": error_output}
+        return {
+            "final_text_for_tts": fallback_tts,
+            "final_ui_actions": []
+        }

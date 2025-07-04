@@ -76,7 +76,13 @@ async def feedback_output_formatter_node(state: AgentGraphState) -> dict:
 
     logger.info(f"Feedback formatter created TTS and {len(final_ui_actions)} UI actions.")
 
+    # Standardize the output to a single dictionary for consistency across flows
+    output_content = {
+        "text_for_tts": final_tts,
+        "ui_actions": final_ui_actions
+    }
+
     return {
-        "final_text_for_tts": final_tts,
-        "final_ui_actions": final_ui_actions
+        "output_content": output_content,
+        "last_action_was": "FEEDBACK_DELIVERY"
     }

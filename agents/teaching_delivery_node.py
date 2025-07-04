@@ -66,8 +66,9 @@ async def teaching_delivery_generator_node(state: AgentGraphState) -> dict:
 
         return {
             "output_content": output_data,
-            "last_action_was": "TEACHING_DELIVERY", # Flag for router
-            "rag_document_data": None # Clear this after use
+            "intermediate_teaching_payload": output_data,
+            "last_action_was": "TEACHING_DELIVERY",  # Flag for router
+            "rag_document_data": None  # Clear this after use
         }
 
     except Exception as e:

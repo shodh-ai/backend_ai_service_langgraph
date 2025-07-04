@@ -13,12 +13,37 @@ async def teaching_output_formatter_node(state: dict) -> dict:
     """
     logger.info("---Executing Teaching Output Formatter---")
     
-    # Get the payload from the generator node
+    # Primary path: generator saved a structured payload
     payload = state.get("intermediate_teaching_payload", {})
+
+    # Fallback: delivery generator wrote its output directly on the state
     if not payload:
-        logger.error("Formatter received an empty teaching payload.")
-        # Handle error case if necessary
-        return {"final_ui_actions": []}
+        if state.get("output_content"):
+            payload = state.get("output_content")
+        elif state.get("text_for_tts") is not None:
+            payload = {
+                "text_for_tts": state.get("text_for_tts"),
+                "ui_actions": state.get("ui_actions", []),
+            }
+        else:
+            logger.error("Formatter received an empty teaching payload and found no fallback keys.")
+            return {"final_ui_actions": []}
+
+    # If payload already matches final schema, just return it
+    if payload and "text_for_tts" in payload and "ui_actions" in payload:
+        text = payload.get("text_for_tts")
+        ui_actions = payload.get("ui_actions") or []
+        # If no UI actions, create a default SPEAK_THEN_LISTEN so the agent listens
+        if not ui_actions:
+            ui_actions.append({
+                "action_type": "SPEAK_THEN_LISTEN",
+                "speak_text": text,
+                "listen_config": {"silence_timeout_ms": 3000}
+            })
+        return {
+            "text_for_tts": text,
+            "final_ui_actions": ui_actions,
+        }
 
     sequence = payload.get("sequence", [])
     if not sequence:
@@ -60,4 +85,8 @@ async def teaching_output_formatter_node(state: dict) -> dict:
 
     logger.info(f"Formatted plan into a single SPEAK_THEN_LISTEN action.")
 
-    return {"final_ui_actions": final_actions}
+    # Return in format expected by LiveKit service
+    return {
+        "text_for_tts": full_text_to_speak,
+        "final_ui_actions": final_actions,
+    }

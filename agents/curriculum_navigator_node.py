@@ -1,159 +1,113 @@
 import logging
-import yaml
-import os
 import json
-from state import AgentGraphState
+from typing import Dict, Any, List
 import google.generativeai as genai
 from google.generativeai.types import GenerationConfig
 
+from state import AgentGraphState
+# Assume these utility modules exist and are accessible
+from memory.mem0_client import shared_mem0_client as mem0_client # Your Mem0 client instance
+from knowledge.knowledge_client import knowledge_client # Your client for LO Tree/Curriculum Map
+from graph.utils import query_knowledge_base # The correct RAG utility for the knowledge base
+
 logger = logging.getLogger(__name__)
 
-# Define the path to the prompts file
-PROMPTS_FILE_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'llm_prompts.yaml')
+# It's better to configure the model once, but for modularity, we can do it here.
+# Ensure GOOGLE_API_KEY is loaded via load_dotenv() in your main app.py
+# genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-# Load prompts once when the module is loaded
-PROMPTS = {}
-try:
-    with open(PROMPTS_FILE_PATH, 'r') as f:
-        loaded_prompts = yaml.safe_load(f)
-        if loaded_prompts and 'PROMPTS' in loaded_prompts:
-            PROMPTS = loaded_prompts['PROMPTS']
-        else:
-            logger.error(f"Could not find 'PROMPTS' key in {PROMPTS_FILE_PATH} for curriculum_navigator_node")
-except FileNotFoundError:
-    logger.error(f"Prompts file not found at {PROMPTS_FILE_PATH} for curriculum_navigator_node")
-except yaml.YAMLError as e:
-    logger.error(f"Error parsing YAML from {PROMPTS_FILE_PATH} for curriculum_navigator_node: {e}")
-
-async def determine_next_pedagogical_step_stub_node(state: AgentGraphState) -> dict:
+async def curriculum_navigator_node(state: AgentGraphState) -> dict:
     """
-    Determines the next task and generates an LLM-based suggestion for it.
-    Sets 'next_task_details' and a new 'task_suggestion_llm_output' field in the state.
-    The 'output_content' from this node will primarily contain UI actions for the task button.
-    
-    Args:
-        state: The current agent graph state
+    The MACRO PLANNER.
+    Determines the next high-level Learning Objective (LO) for the student.
+    """
+    logger.info("--- Executing Curriculum Navigator Node (Macro Planner) ---")
+    try:
+        user_id = state["user_id"]
+        student_profile = state.get("student_memory_context", {})
+        recent_history = state.get("recent_interaction_history", []) # Get recent history
+        active_persona = state.get("active_persona", "The Structuralist")
+        student_preference_override = state.get("student_preference_override")
+
+        if not student_profile:
+            logger.warning(f"CurriculumNavigatorNode: student_memory_context is empty for user '{user_id}'. Planning as a new student.")
+            # Proceed with an empty profile, the LLM can handle this.
+
+        # 1. Fetch necessary "world model" information
+        master_curriculum_map = await knowledge_client.get_full_curriculum_map()
+
+        # 2. RAG on high-level pedagogy (optional but powerful)
+        rag_query = (f"Student profile: {student_profile}. Recent interactions: {recent_history}. "
+                     f"Student preference: {student_preference_override}. "
+                     f"Which general skill area should be prioritized?")
+        retrieved_planning_strategies = await query_knowledge_base(rag_query, category="curriculum_planning")
+
+        # 3. Construct prompt for the LLM planner
+        prompt = f"""
+        You are an expert AI Curriculum Navigator for a TOEFL tutor, embodying the '{active_persona}' persona.
+        Your task is to determine the single most impactful Learning Objective (LO) for the student to work on next.
+
+        STUDENT'S LONG-TERM PROFILE:
+        {json.dumps(student_profile, indent=2)}
+
+        STUDENT'S RECENT INTERACTION HISTORY (last 5 turns):
+        {json.dumps(recent_history, indent=2)}
+
+        STUDENT'S EXPLICIT PREFERENCE (if any):
+        {student_preference_override or "None given."}
+
+        AVAILABLE CURRICULUM & DEPENDENCIES (lo_id: title, prerequisites):
+        {json.dumps(master_curriculum_map, indent=2)}
+
+        EXPERT STRATEGY EXAMPLES for curriculum planning:
+        {json.dumps(retrieved_planning_strategies, indent=2)}
+
+        INSTRUCTIONS:
+        1.  Analyze the student's long-term profile AND their recent interaction history. The recent history is very important as it may show immediate struggles or interests.
+        2.  If the recent history shows the student struggling with a specific concept, consider proposing an LO that addresses it, even if it wasn't in the long-term plan.
+        3.  Consider the curriculum dependencies. A student CANNOT be assigned an LO if they have not mastered all of its `prerequisites`.
+        4.  Prioritize the student's explicit preference (`{student_preference_override}`) if it's a valid and unlocked LO.
+        5.  If no preference or recent struggle, choose the most logical next LO based on their long-term weaknesses and the curriculum path.
+        6.  Generate a brief, persona-aligned statement to propose this LO to the student.
         
-    Returns:
-        Dict with updates for 'next_task_details', 'task_suggestion_llm_output', and 'output_content'.
-    """
-    logger.info("CurriculumNavigatorNode: Determining next pedagogical step and generating LLM task suggestion.")
-    
-    # Hardcoded first speaking task details (matches your P1 goal example)
-    next_task = {
-        "type": "SPEAKING",
-        "question_type": "Q1", 
-        "prompt_id": "SPK_Q1_P1_FAV_HOLIDAY", # Example prompt_id
-        "title": "Your Favorite Holiday", # Changed to match your example
-        "description": "Tell me about your favorite holiday. What do you usually do, and why is it special to you?",
-        "prep_time_seconds": 15,
-        "response_time_seconds": 45
-    }
-    
-    logger.info(f"CurriculumNavigatorNode: Selected task: {next_task['title']} ({next_task['prompt_id']})")
+        Return a single, valid JSON object with the following keys:
+        - "reasoning": Your step-by-step reasoning for choosing this LO, explicitly mentioning how recent history influenced your choice.
+        - "chosen_lo_id": The unique ID of the selected Learning Objective (e.g., "LO_ThesisStatement").
+        - "chosen_lo_title": The human-readable title of the LO (e.g., "Crafting a Strong Thesis Statement").
+        - "proposal_script_for_student": The text you will use to propose this to the student.
+        
+        Example Output:
+        {{
+            "reasoning": "The student's goal is writing improvement. Their profile shows a weakness in 'Essay Structure'. They have mastered the prerequisite 'IdentifyingMainIdea'. Therefore, the next logical LO is 'ThesisStatement' (LO_002). This aligns with their goals and unlocks further writing skills.",
+            "chosen_lo_id": "LO_002",
+            "chosen_lo_title": "Writing a Clear Topic Sentence",
+            "proposal_script_for_student": "Based on your focus on writing, I think the most impactful skill we can work on next is how to write clear topic sentences for your paragraphs. This is key for well-organized essays. How does that sound?"
+        }}
+        """
 
-    task_suggestion_tts = f"Would you like to start with a task about {next_task['title']}?" # Default fallback
-    task_suggestion_llm_output = {"task_suggestion_tts": task_suggestion_tts} # Default structure
+        # 4. Call the LLM
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        response = await model.generate_content_async(prompt, generation_config=GenerationConfig(response_mime_type="application/json"))
+        planner_output = json.loads(response.text)
 
-    prompt_config = PROMPTS.get('welcome_task_suggestion')
-    if not prompt_config:
-        logger.error("Welcome task suggestion prompt configuration not found. Using default suggestion.")
-    else:
-        api_key = os.getenv("GOOGLE_API_KEY")
-        if not api_key:
-            logger.error("GOOGLE_API_KEY not found in environment. Using default task suggestion.")
-        else:
-            try:
-                logger.debug("TaskSuggestion: Attempting genai.configure()...")
-                genai.configure(api_key=api_key)
-                logger.debug("TaskSuggestion: genai.configure() successful.")
-                
-                logger.debug(f"TaskSuggestion: Attempting to initialize GenerativeModel: gemini-2.0-flash")
-                model = genai.GenerativeModel(
-                    'gemini-2.0-flash',
-                    generation_config=GenerationConfig(response_mime_type="application/json")
-                )
-                logger.debug("TaskSuggestion: GenerativeModel initialized successfully.")
+        logger.info(f"CurriculumNavigatorNode: Planned next LO for user '{user_id}': {planner_output.get('chosen_lo_title')}")
+        logger.debug(f"CurriculumNavigatorNode: Reasoning: {planner_output.get('reasoning')}")
 
-                persona_details = "Your friendly and encouraging AI guide, Rox."
-                system_prompt_text = prompt_config.get('system_prompt', '').format(
-                    persona_details=persona_details,
-                    task_title=next_task['title']
-                )
-                user_prompt_text = prompt_config.get('user_prompt', '')
-                full_prompt = f"{system_prompt_text}\n\n{user_prompt_text}"
-                
-                logger.info(f"TaskSuggestion: GOOGLE_API_KEY loaded: {api_key[:5]}...{api_key[-5:] if len(api_key) > 10 else ''}")
-                logger.info(f"TaskSuggestion: Full prompt for LLM: {full_prompt}")
-                
-                raw_llm_response_text_task = ""
-                try:
-                    logger.debug("TaskSuggestion: Attempting model.generate_content_async()...")
-                    response = await model.generate_content_async(full_prompt)
-                    logger.debug("TaskSuggestion: model.generate_content_async() successful.")
-                    raw_llm_response_text_task = response.text
-                    logger.info(f"TaskSuggestion: Raw LLM Response: {raw_llm_response_text_task}")
-                except Exception as gen_err:
-                    logger.error(f"TaskSuggestion: Error during model.generate_content_async(): {gen_err}", exc_info=True)
-                    task_suggestion_tts += " (LLM Generation Error)" # Append to default
-                    task_suggestion_llm_output = {"task_suggestion_tts": task_suggestion_tts}
-                    logger.info(f"CurriculumNavigatorNode: Using fallback task suggestion due to generation error.")
-                    # Skip further JSON processing if generation failed
-                    return {
-                        "output_content": {
-                            "response": "", 
-                            "ui_actions": [
-                                {
-                                    "action_type": "DISPLAY_NEXT_TASK_BUTTON", 
-                                    "parameters": next_task
-                                },
-                                {
-                                     "action_type": "ENABLE_START_TASK_BUTTON", 
-                                     "parameters": {"button_id": "start_task_button_id"} 
-                                }
-                            ]
-                        },
-                        "task_suggestion_llm_output": task_suggestion_llm_output
-                    }
-
-                try:
-                    llm_json_output = json.loads(raw_llm_response_text_task)
-                    task_suggestion_tts = llm_json_output.get("task_suggestion_tts", task_suggestion_tts + " (JSON Key Missing)")
-                except json.JSONDecodeError as json_err:
-                    logger.error(f"TaskSuggestion: JSONDecodeError parsing LLM response. Error: {json_err}. Raw text: {raw_llm_response_text_task}")
-                    task_suggestion_tts += " (JSON Parse Error)"
-                except Exception as parse_err:
-                    logger.error(f"TaskSuggestion: Unexpected error parsing LLM response. Error: {parse_err}. Raw text: {raw_llm_response_text_task}")
-                    task_suggestion_tts += " (Unexpected Parse Error)"
-                
-                task_suggestion_llm_output = {"task_suggestion_tts": task_suggestion_tts}
-                logger.info(f"CurriculumNavigatorNode: LLM-generated task suggestion: {task_suggestion_tts}")
-
-            except Exception as e:
-                logger.error(f"TaskSuggestion: Outer error in LLM call block (e.g., config, model init): {e}", exc_info=True)
-                task_suggestion_tts += " (LLM Setup Error)" # Append to default
-                task_suggestion_llm_output = {"task_suggestion_tts": task_suggestion_tts}
-                logger.info(f"CurriculumNavigatorNode: Using default task suggestion due to LLM setup error.")
-
-    # Output content for this node focuses on the UI action for the task button.
-    # The actual TTS for suggesting the task is in task_suggestion_llm_output and will be handled by the formatter.
-    output_for_this_node = {
-        "response": "", # No direct TTS from this node's output_content.response
-        "ui_actions": [
-            {
-                "action_type": "DISPLAY_NEXT_TASK_BUTTON", # Or a more generic "SHOW_TASK_PROMPT"
-                "parameters": next_task
+        # 5. Update the state with the planner's decision
+        return {
+            # This is the high-level decision, the "what"
+            "current_lo_to_address": {
+                "id": planner_output.get("chosen_lo_id"),
+                "title": planner_output.get("chosen_lo_title"),
             },
-            {
-                 "action_type": "ENABLE_START_TASK_BUTTON", # As per your goal
-                 "parameters": {"button_id": "start_task_button_id"} # Assuming a button ID
-            }
-        ]
-    }
-    
-    # Return state updates
-    return {
-        "next_task_details": next_task,
-        "task_suggestion_llm_output": task_suggestion_llm_output, # New field for the formatter
-        "output_content": output_for_this_node # Contains UI actions
-    }
+            # This is the AI's spoken output for this turn
+            "output_content": {
+                "text_for_tts": planner_output.get("proposal_script_for_student"),
+                "ui_actions": [] # UI Actions can be added to show options etc.
+            },
+            "last_ai_action": "PROPOSED_NEW_LO" # A flag for the next conversational turn
+        }
+
+    except Exception as e:
+        logger.error(f"CurriculumNavigatorNode: CRITICAL FAILURE: {e}", exc_info=True)
+        return {"error_message": f"Failed to determine next learning objective: {e}"}

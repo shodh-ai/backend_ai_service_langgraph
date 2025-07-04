@@ -1,0 +1,12 @@
+{
+    "WRT_T1_STRAT_001": {
+        "title": "The student will be able to identify the topic sentence (main argument) and supporting sentences (key supporting points) in a simple academic paragraph.",
+        "prerequisites": []
+    },
+    "WRT_T1_CONT_001": {
+        "title": "The student can identify and clearly state the main topic and the central arguments of both the reading and the lecture in a concise introductory paragraph.",
+        "prerequisites": [
+            "WRT_T1_STRAT_001"
+        ]
+    }
+}

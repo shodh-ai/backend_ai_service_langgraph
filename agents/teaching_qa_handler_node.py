@@ -41,19 +41,18 @@ async def teaching_qa_handler_node(state: AgentGraphState) -> dict:
 
         # 1. RAG for context related to the question and lesson step
         # Use the generic KB query function. The student's question is the best query text.
-        # The lesson_id is the most specific category for filtering.
+        # The lesson_id provides specific context for the RAG query.
         current_context = state.get("current_context", {})
         lesson_id = current_context.get("lesson_id") # Get lesson_id, may be None
 
-        # If lesson_id is None, default to a general category to prevent crashes.
-        # This ensures the KB query has a valid string category.
         if not lesson_id:
-            lesson_id = "teaching" # General fallback category
-            logger.warning(f"lesson_id not found in context, defaulting to '{lesson_id}' for KB query.")
+            logger.warning("lesson_id not found in context. Query will be against the general 'teaching' category.")
 
+        # Query the knowledge base using the 'teaching' category and the specific lesson_id if available.
         rag_context = await query_knowledge_base(
             query_string=student_question,
-            category=lesson_id
+            category="teaching",
+            lesson_id=lesson_id
         )
         
         # 2. Construct LLM Prompt to answer the question

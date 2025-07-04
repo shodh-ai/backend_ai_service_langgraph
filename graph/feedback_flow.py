@@ -3,12 +3,9 @@ from langgraph.graph import StateGraph, END
 from state import AgentGraphState
 
 # 1. Import the agent node functions
-from agents import (
-    feedback_RAG_document_node,
-    feedback_generator_node,
-    feedback_output_formatter_node,
-
-)
+from agents.feedback_RAG_document_node import feedback_RAG_document_node
+from agents.feedback_generator import feedback_generator_node
+from agents.feedback_output_formatter import feedback_output_formatter_node
 
 # 2. Define standardized node names
 NODE_FEEDBACK_RAG = "feedback_rag"

@@ -1,0 +1,12 @@
+{
+    "VOC_ACAD_AWL_001": {
+        "title": "The student will be able to identify and understand the basic meaning of 5-10 high-frequency words from the Academic Word List (AWL) in simple sentences and short paragraphs.",
+        "prerequisites": []
+    },
+    "Using varied and precise academic vocabulary.: Introduction - Thesis Statement": {
+        "title": "Using varied and precise academic vocabulary.: Introduction - Thesis Statement",
+        "prerequisites": [
+            "VOC_ACAD_AWL_001"
+        ]
+    }
+}

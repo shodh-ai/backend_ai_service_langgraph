@@ -6,10 +6,12 @@
 # ===================================
 # Core System Nodes
 # ===================================
-from .student_model_node import load_student_data_node, save_interaction_node
+from .student_model_node import (load_student_data_node, save_interaction_node)
+from .initiate_module_execution_node import initiate_module_execution_node
 from .conversational_manager_node import handle_home_greeting_node as handle_welcome_node
-from .curriculum_navigator_node import determine_next_pedagogical_step_stub_node
-
+from .curriculum_navigator_node import curriculum_navigator_node
+from .pedagogical_strategy_planner_node import pedagogical_strategy_planner_node
+from .plan_advancer_node import plan_advancer_node
 from .conversation_handler import conversation_handler_node
 
 # ===================================
@@ -42,14 +44,11 @@ from .teaching_generator import teaching_generator_node
 from .teaching_output_formatter import teaching_output_formatter_node
 
 # --- Pedagogy Flow ---
-from .pedagogy_rag_node import pedagogy_rag_node
-from .pedagogy_generator import pedagogy_generator_node
-from .pedagogy_output_formatter import pedagogy_output_formatter_node
+
 
 # ===================================
 # General Purpose & Legacy Nodes
 # ===================================
-from .RAG_document import RAG_document_node # Generic RAG, to be reviewed
 from .error_generator import error_generator_node
 from .initial_report_generation import initial_report_generation_node
 
@@ -61,7 +60,8 @@ __all__ = [
     "load_student_data_node",
     "save_interaction_node",
     "handle_welcome_node",
-    "determine_next_pedagogical_step_stub_node",
+    "curriculum_navigator_node",
+    "initiate_module_execution_node",
 
 
     # General Conversation
@@ -91,14 +91,10 @@ __all__ = [
     "teaching_RAG_document_node",
     "teaching_generator_node",
     "teaching_output_formatter_node",
-    
-    # Pedagogy Flow
-    "pedagogy_rag_node",
-    "pedagogy_generator_node",
-    "pedagogy_output_formatter_node",
+
+
 
     # General & Legacy
-    "RAG_document_node",
     "error_generator_node",
     "initial_report_generation_node",
 ]

@@ -4,7 +4,7 @@ import logging
 import chromadb
 from chromadb.utils import embedding_functions
 import os
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 
 logger = logging.getLogger(__name__)
 
@@ -61,31 +61,53 @@ def get_chroma_collection() -> Optional[chromadb.Collection]:
         _collection = None
         return None
 
-async def query_knowledge_base(query_string: str, category: str) -> List[Dict]:
+async def query_knowledge_base(query_string: str, category: str, lesson_id: str = None) -> List[Dict[str, Any]]:
     """
-    A shared utility function to query the ChromaDB vector store.
+    Queries the ChromaDB knowledge base with enhanced filtering.
+
+    Args:
+        query_string (str): The user's query.
+        category (str): The primary category to filter by (e.g., 'teaching').
+        lesson_id (str, optional): The specific lesson_id to filter by. Defaults to None.
+
+    Returns:
+        List[Dict[str, Any]]: A list of retrieved documents.
     """
-    # Get the collection using our new, resilient function.
-    collection = get_chroma_collection()
-    
-    if not collection:
-        logger.error("Cannot perform RAG because ChromaDB collection is not available.")
-        return []
+    log_message = f"Querying KB for category '{category}'" 
+    if lesson_id:
+        log_message += f" and lesson_id '{lesson_id}'"
+    log_message += f" with query: '{query_string[:50]}...'"
+    logger.info(log_message)
 
     try:
-        logger.info(f"Querying KB for category '{category}' with query: '{query_string[:100]}...'")
+        collection = get_chroma_collection()
         
-        query_results = collection.query(
+        if collection is None:
+            logger.error("Cannot perform RAG because ChromaDB collection is not available.")
+            return []
+
+        # --- Dynamic Filter Construction ---
+        filter_conditions = {"category": category}
+        if lesson_id:
+            # Using $and to require both conditions to be met
+            filter_conditions = {
+                "$and": [
+                    {"category": {"$eq": category}},
+                    {"lesson_id": {"$eq": lesson_id}}
+                ]
+            }
+        
+        results = collection.query(
             query_texts=[query_string],
             n_results=TOP_K_RESULTS,
-            where={"category": category}
+            where=filter_conditions
         )
+
+        retrieved_documents = results.get('metadatas', [[]])[0]
         
-        retrieved_documents = query_results.get('metadatas', [[]])[0]
-        
-        logger.info(f"Query successful. Retrieved {len(retrieved_documents)} documents for category '{category}'.")
+        logger.info(f"Query successful. Retrieved {len(retrieved_documents)} documents.")
         return retrieved_documents
 
     except Exception as e:
-        logger.error(f"An error occurred during knowledge base query for category '{category}': {e}", exc_info=True)
+        logger.error(f"An error occurred during knowledge base query: {e}", exc_info=True)
         return []
