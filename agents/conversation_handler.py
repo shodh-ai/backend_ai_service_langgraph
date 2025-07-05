@@ -9,80 +9,77 @@ from google.generativeai.types import GenerationConfig
 logger = logging.getLogger(__name__)
 
 async def conversation_handler_node(state: AgentGraphState) -> dict:
-    logger.info("---Executing Conversation Handler Node (NLU Intent Classification)---")
+    """
+    This node performs NLU/Intent Classification on the student's input.
+    Its SOLE JOB is to understand what the student wants and update the state
+    with that intent, so downstream routers can make decisions.
+    """
+    logger.info("---Executing Conversation Handler Node (Context-Aware NLU) ---")
     
     try:
-        transcript = state.get("transcript")
-        if not transcript or not transcript.strip():
+        transcript = state.get("transcript", "")
+        current_context = state.get("current_context", {})
+        task_stage = current_context.get("task_stage", "")
+        chat_history = state.get("chat_history", [])
+        
+        if not transcript.strip():
             logger.warning("ConversationHandlerNode: Transcript is empty. Nothing to process.")
-            return {"classified_intent": "NO_INPUT"}
+            return {
+                "classified_student_intent": "NO_INPUT",
+                "classified_student_entities": None
+            }
 
-        # Check for the last AI action to provide conversational context
-        last_ai_action = state.get("last_ai_action")
+        # --- DYNAMIC PROMPT SELECTION BASED ON CONTEXT ---
+        possible_intents = []
+        nlu_instructions = ""
 
-        if last_ai_action == "PROPOSED_NEW_LO":
-            # This is the specific context for handling the LO proposal
-            lo_title = state.get("current_lo_to_address", {}).get("title", "the proposed topic")
-            llm_prompt = f"""
-As an NLU engine, your task is to classify the user's intent.
-The AI just proposed working on "{lo_title}".
-The user responded: "{transcript}"
+        if task_stage == "ROX_CONVERSATION_TURN":
+            possible_intents = ["CONFIRM_PROCEED_WITH_LO", "REJECT_OR_QUESTION_LO", "REQUEST_STATUS_DETAIL", "GENERAL_CHITCHAT"]
+            nlu_instructions = "The AI just proposed a new learning objective. Classify the student's response."
+        
+        elif task_stage in ["TEACHING_PAGE_QA", "MODELING_PAGE_QA", "SCAFFOLDING_PAGE_QA"]:
+            possible_intents = ["ASK_CLARIFICATION_QUESTION", "REQUEST_EXAMPLE", "STATE_CONFUSION", "OFF_TOPIC_QUESTION", "CONTINUE_LESSON"]
+            last_ai_statement = chat_history[-2]['content'] if len(chat_history) > 1 else "the current topic"
+            nlu_instructions = f"The AI is in the middle of a lesson and just explained a concept. The AI's last statement was: '{last_ai_statement}'. Now, classify the student's following question/statement."
 
-Is the student's intent 'CONFIRM_PROCEED_WITH_LO' or 'REJECT_OR_QUESTION_LO'?
-- 'CONFIRM_PROCEED_WITH_LO' means they agree, say yes, okay, etc.
-- 'REJECT_OR_QUESTION_LO' means they say no, ask a question, or want to do something else.
-
-Respond with a SINGLE JSON object with one key, "intent", and the classified intent as the value.
-Example: {{"intent": "CONFIRM_PROCEED_WITH_LO"}}
-"""
-        elif state.get("interruption_context", {}).get("expected_intent"):
-            # Focused prompt using the micro-intent
-            llm_prompt = f"""
-As an NLU engine, your task is to classify the user's intent.
-The system was expecting the user to provide a response with the intent: '{expected_intent}'.
-The user said: "{transcript}"
-
-Analyze the user's response.
-- If the user's intent matches the expected intent, respond with a JSON object: {{"intent": "{expected_intent}"}}
-- If the user's intent is different, classify the new intent and respond with a JSON object: {{"intent": "NEW_INTENT_CLASSIFICATION"}}
-- Possible intents include: CONFIRMATION, REQUEST_CLARIFICATION, DISAGREEMENT, QUESTION, PROVIDE_EXAMPLE, OFF_TOPIC.
-"""
         else:
-            # General-purpose intent classification
-            llm_prompt = f"""
-As an NLU engine, your task is to classify the user's intent based on their statement.
-The user said: "{transcript}"
+            possible_intents = ["GENERAL_CONFIRM", "GENERAL_REJECT", "GENERAL_QUESTION"]
+            nlu_instructions = "Classify the user's general intent."
 
-Classify the user's intent from the following list:
-- REQUEST_TEACHING_LESSON
-- START_MODELLING_ACTIVITY
-- ASK_QUESTION
-- PROVIDE_FEEDBACK
-- GENERAL_CONVERSATION
+        prompt = f"""
+        You are an NLU assistant for an AI Tutor.
+        Context: {nlu_instructions}
+        Student said: "{transcript}"
 
-Respond with a SINGLE JSON object with one key, "intent", and the classified intent as the value.
-Example: {{"intent": "ASK_QUESTION"}}
-"""
+        Categorize the student's intent into ONE of the following types: {possible_intents}
+        If the intent is a question, also extract the core topic of the question.
 
-        logger.debug(f"NLU Prompt:\n{llm_prompt}")
-
+        Return ONLY a single valid JSON object with the format: {{"intent": "<INTENT_NAME>", "extracted_topic": "<topic if any, otherwise null>"}}
+        """
+        
+        # --- Call the LLM ---
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:
             raise ValueError("GOOGLE_API_KEY environment variable is not set.")
 
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(
-            "gemini-2.0-flash",
+            "gemini-1.5-flash",
             generation_config=GenerationConfig(response_mime_type="application/json"),
         )
-        response = await model.generate_content_async(llm_prompt)
-        response_json = json.loads(response.text)
-        classified_intent = response_json.get("intent")
+        response = await model.generate_content_async(prompt)
+        llm_response_json = json.loads(response.text)
         
+        classified_intent = llm_response_json.get("intent")
+        extracted_entities = llm_response_json.get("entities") or llm_response_json.get("extracted_topic")
+
         logger.info(f"NLU classified intent as: {classified_intent}")
 
-        return {"classified_intent": classified_intent}
-
+        # --- THE CRITICAL FIX: Return a dictionary to update the state ---
+        return {
+            "classified_student_intent": classified_intent,
+            "classified_student_entities": extracted_entities
+        }
     except Exception as e:
         logger.error(f"ConversationHandlerNode: CRITICAL FAILURE: {e}", exc_info=True)
         return {"error_message": str(e), "route_to_error_handler": True}

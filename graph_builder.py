@@ -106,15 +106,29 @@ async def initial_router_logic(state: AgentGraphState) -> str:
 
 
 async def route_after_nlu(state: AgentGraphState) -> str:
-    """Router that decides the path after the NLU/conversation handler node."""
-    intent = state.get("classified_intent") or state.get("student_intent_for_rox_turn")
+    """Router that decides the path after the context-aware NLU/conversation handler node."""
+    intent = state.get("classified_student_intent")
+    logger.info(f"NLU Router: Received intent from state: '{intent}'.")
+
     if intent in ("CONFIRM_PROCEED_WITH_LO", "CONFIRM_START_TASK"):
         logger.info("NLU Router: Student confirmed LO. Routing to Pedagogical Strategy Planner.")
         return NODE_PEDAGOGICAL_STRATEGY_PLANNER
+
+    elif intent == "REJECT_OR_QUESTION_LO":
+        logger.info("NLU Router: Student rejected LO. Routing to handle rejection.")
+        return NODE_HANDLE_WELCOME # Rox flow can handle this
+
+    elif intent == "ASK_CLARIFICATION_QUESTION":
+        logger.info("NLU Router: Student asked a clarification question. Routing to the Teaching QA Handler.")
+        return NODE_TEACHING_MODULE
+
+    # You would add other nodes here, e.g. for status requests
+    # elif intent == "REQUEST_STATUS_DETAIL":
+    #     logger.info("NLU Router: Student requested status. Routing to progress reporter.")
+    #     return "progress_reporter_node" 
+
     else:
-        # For any other intent (questions, rejections), we end the turn.
-        # The AI's response is already in 'output_content' from the NLU node.
-        logger.info(f"NLU Router: Intent is '{intent}'. Ending turn.")
+        logger.warning(f"NLU Router: Intent '{intent}' has no specific route. Ending turn.")
         return END
 
 
@@ -195,13 +209,17 @@ def build_graph(memory: AsyncSqliteSaver):
         }
     )
 
-    # After the NLU handler, decide whether to start a lesson or end the turn
+    # After the NLU handler, route to the appropriate next step based on the classified intent.
     workflow.add_conditional_edges(
         NODE_CONVERSATION_HANDLER,
         route_after_nlu,
         {
             NODE_PEDAGOGICAL_STRATEGY_PLANNER: NODE_PEDAGOGICAL_STRATEGY_PLANNER,
-            END: END  # End the turn if the student asks a question or rejects the plan
+            NODE_TEACHING_MODULE: NODE_TEACHING_MODULE,
+            NODE_HANDLE_WELCOME: NODE_HANDLE_WELCOME,
+            # Add other nodes here as you implement them
+            # "progress_reporter_node": "progress_reporter_node",
+            END: END
         }
     )
 
